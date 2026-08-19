@@ -5,6 +5,8 @@ import android.content.Context
 import com.smartworkalarm.alarm.AlarmSchedulerImpl
 import com.smartworkalarm.alarm.AlarmRinger
 import com.smartworkalarm.alarm.AlarmRingerImpl
+import com.smartworkalarm.domain.usecase.SaveAlarmUseCase
+import com.smartworkalarm.presentation.alarmedit.AlarmSaver
 import com.smartworkalarm.domain.repository.AlarmScheduler
 import dagger.Binds
 import dagger.Module
@@ -23,6 +25,9 @@ abstract class AlarmBindings {
 
     @Binds
     abstract fun bindAlarmRinger(implementation: AlarmRingerImpl): AlarmRinger
+
+    @Binds
+    abstract fun bindAlarmSaver(implementation: SaveAlarmUseCase): AlarmSaver
 }
 
 @Module

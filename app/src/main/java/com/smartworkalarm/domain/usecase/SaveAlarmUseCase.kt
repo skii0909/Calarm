@@ -6,6 +6,7 @@ import com.smartworkalarm.domain.repository.AlarmScheduler
 import java.time.Clock
 import java.time.ZoneId
 import javax.inject.Inject
+import com.smartworkalarm.presentation.alarmedit.AlarmSaver
 
 class SaveAlarmUseCase @Inject constructor(
     private val repository: AlarmRepository,
@@ -13,7 +14,9 @@ class SaveAlarmUseCase @Inject constructor(
     private val calculator: CalculateNextOccurrenceUseCase,
     private val clock: Clock,
     private val zoneId: ZoneId,
-) {
+) : AlarmSaver {
+    override suspend fun save(alarm: Alarm): Result<Long> = execute(alarm)
+
     suspend fun execute(alarm: Alarm): Result<Long> = runCatching {
         require(alarm.name.isNotBlank()) { "알람 이름을 입력하세요" }
         require(alarm.hour in 0..23 && alarm.minute in 0..59) { "올바른 시간을 입력하세요" }
