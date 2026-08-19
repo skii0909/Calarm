@@ -3,6 +3,8 @@ package com.smartworkalarm.di
 import android.app.AlarmManager
 import android.content.Context
 import com.smartworkalarm.alarm.AlarmSchedulerImpl
+import com.smartworkalarm.alarm.AlarmRinger
+import com.smartworkalarm.alarm.AlarmRingerImpl
 import com.smartworkalarm.domain.repository.AlarmScheduler
 import dagger.Binds
 import dagger.Module
@@ -18,6 +20,9 @@ import java.time.ZoneId
 abstract class AlarmBindings {
     @Binds
     abstract fun bindAlarmScheduler(implementation: AlarmSchedulerImpl): AlarmScheduler
+
+    @Binds
+    abstract fun bindAlarmRinger(implementation: AlarmRingerImpl): AlarmRinger
 }
 
 @Module
@@ -26,6 +31,10 @@ object AlarmModule {
     @Provides
     fun provideAlarmManager(@ApplicationContext context: Context): AlarmManager =
         context.getSystemService(AlarmManager::class.java)
+
+    @Provides
+    fun provideNotificationManager(@ApplicationContext context: Context): android.app.NotificationManager =
+        context.getSystemService(android.app.NotificationManager::class.java)
 
     @Provides
     fun provideZoneId(): ZoneId = ZoneId.systemDefault()
