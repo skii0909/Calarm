@@ -60,7 +60,7 @@ fun AlarmEditScreen(viewModel: AlarmEditViewModel, alarmId: Long, onDone: () -> 
                 FilterChip(
                     selected = state.repeatDaysMask and day.bit != 0,
                     onClick = { viewModel.toggleDay(day) },
-                    label = { Text(day.name.take(1)) },
+                    label = { Text(dayLabel(day)) },
                 )
             }
         }
@@ -70,6 +70,16 @@ fun AlarmEditScreen(viewModel: AlarmEditViewModel, alarmId: Long, onDone: () -> 
         Button(onClick = viewModel::save, modifier = Modifier.fillMaxWidth()) { Text("저장") }
         if (alarmId != 0L) OutlinedButton(onClick = { viewModel.delete() }, modifier = Modifier.fillMaxWidth()) { Text("삭제") }
     }
+}
+
+private fun dayLabel(day: RepeatDay): String = when (day) {
+    RepeatDay.MONDAY -> "월"
+    RepeatDay.TUESDAY -> "화"
+    RepeatDay.WEDNESDAY -> "수"
+    RepeatDay.THURSDAY -> "목"
+    RepeatDay.FRIDAY -> "금"
+    RepeatDay.SATURDAY -> "토"
+    RepeatDay.SUNDAY -> "일"
 }
 
 @Composable

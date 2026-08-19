@@ -41,6 +41,12 @@ fun AlarmListScreen(viewModel: AlarmListViewModel, onAdd: () -> Unit, onEdit: (L
     val exactMissing = Build.VERSION.SDK_INT >= 31 && !alarmManager.canScheduleExactAlarms()
     val calendarMissing = ContextCompat.checkSelfPermission(context, Manifest.permission.READ_CALENDAR) !=
         android.content.pm.PackageManager.PERMISSION_GRANTED
+    val notificationMissing = Build.VERSION.SDK_INT >= 33 &&
+        ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
+        android.content.pm.PackageManager.PERMISSION_GRANTED
+    val appSettings = {
+        context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${context.packageName}")))
+    }
 
     Scaffold(
         floatingActionButton = { FloatingActionButton(onClick = onAdd) { Text("+") } },
@@ -52,7 +58,12 @@ fun AlarmListScreen(viewModel: AlarmListViewModel, onAdd: () -> Unit, onEdit: (L
                     context.startActivity(Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, Uri.parse("package:${context.packageName}")))
                 }
             }
-            if (calendarMissing) item { PermissionCard("캘린더 권한이 없어 휴가 자동 건너뛰기가 동작하지 않습니다") }
+            if (calendarMissing) item {
+                PermissionCard("캘린더 권한이 없어 휴가 자동 건너뛰기가 동작하지 않습니다", appSettings)
+            }
+            if (notificationMissing) item {
+                PermissionCard("알람 알림 권한이 필요합니다", appSettings)
+            }
             if (alarms.isEmpty()) item { Text("첫 출근 알람을 추가해 보세요.", modifier = Modifier.padding(top = 48.dp)) }
             items(alarms, key = { it.id }) { alarm ->
                 AlarmRow(alarm, onEdit, viewModel::setEnabled)
@@ -88,4 +99,14 @@ private fun AlarmRow(alarm: Alarm, onEdit: (Long) -> Unit, onEnabled: (Long, Boo
 
 private fun repeatSummary(mask: Int): String = RepeatDay.entries
     .filter { mask and it.bit != 0 }
-    .joinToString(" ") { it.name.take(1) }
+    .joinToString(" ") {
+        when (it) {
+            RepeatDay.MONDAY -> "월"
+            RepeatDay.TUESDAY -> "화"
+            RepeatDay.WEDNESDAY -> "수"
+            RepeatDay.THURSDAY -> "목"
+            RepeatDay.FRIDAY -> "금"
+            RepeatDay.SATURDAY -> "토"
+            RepeatDay.SUNDAY -> "일"
+        }
+    }

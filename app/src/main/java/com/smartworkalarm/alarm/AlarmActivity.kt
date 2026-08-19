@@ -2,6 +2,8 @@ package com.smartworkalarm.alarm
 
 import android.content.Intent
 import android.os.Bundle
+import android.os.Build
+import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Arrangement
@@ -22,8 +24,16 @@ import dagger.hilt.android.AndroidEntryPoint
 class AlarmActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setShowWhenLocked(true)
-        setTurnScreenOn(true)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+            setShowWhenLocked(true)
+            setTurnScreenOn(true)
+        } else {
+            @Suppress("DEPRECATION")
+            window.addFlags(
+                WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
+                    WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON,
+            )
+        }
         val id = intent.getLongExtra(AlarmSchedulerImpl.EXTRA_ALARM_ID, -1L)
         val name = intent.getStringExtra(AlarmNotificationFactory.EXTRA_ALARM_NAME) ?: "알람"
         setContent {
