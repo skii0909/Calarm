@@ -17,12 +17,13 @@ class ShouldRingAlarmUseCase @Inject constructor(
     ): AlarmExecutionDecision {
         if (!alarm.enabled) return AlarmExecutionDecision.DO_NOT_RING
         if (!alarm.skipOnCalendarMatch) return AlarmExecutionDecision.RING
+        if (alarm.calendarKeywords.isEmpty()) return AlarmExecutionDecision.RING
 
         val start = date.atStartOfDay(zoneId).toInstant()
         val end = date.plusDays(1).atStartOfDay(zoneId).toInstant()
         return calendarEventSource.getEventsOverlapping(start, end).fold(
             onSuccess = { events ->
-                if (events.any { VacationMatcher.isVacationTitle(it.title) }) {
+                if (events.any { CalendarKeywordMatcher.matches(it.title, alarm.calendarKeywords) }) {
                     AlarmExecutionDecision.SKIP_FOR_VACATION
                 } else {
                     AlarmExecutionDecision.RING

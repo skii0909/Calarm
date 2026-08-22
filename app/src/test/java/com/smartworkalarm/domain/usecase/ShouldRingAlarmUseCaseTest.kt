@@ -42,6 +42,27 @@ class ShouldRingAlarmUseCaseTest {
     }
 
     @Test
+    fun `alarm with empty keywords does not query calendar`() = runTest {
+        val source = FakeEventSource(Result.failure(IllegalStateException()))
+        val decision = ShouldRingAlarmUseCase(source).execute(alarm().copy(calendarKeywords = emptyList()), date, zone)
+
+        assertEquals(AlarmExecutionDecision.RING, decision)
+        assertEquals(0, source.queryCount)
+    }
+
+    @Test
+    fun `only this alarms configured keyword controls its decision`() = runTest {
+        val event = CalendarEvent("해외 출장", Instant.EPOCH, Instant.EPOCH.plusSeconds(60), false)
+        val source = FakeEventSource(Result.success(listOf(event)))
+
+        val tripAlarm = ShouldRingAlarmUseCase(source).execute(alarm().copy(calendarKeywords = listOf("출장")), date, zone)
+        val vacationAlarm = ShouldRingAlarmUseCase(source).execute(alarm().copy(calendarKeywords = listOf("휴가")), date, zone)
+
+        assertEquals(AlarmExecutionDecision.SKIP_FOR_VACATION, tripAlarm)
+        assertEquals(AlarmExecutionDecision.RING, vacationAlarm)
+    }
+
+    @Test
     fun `disabled alarm never rings`() = runTest {
         val decision = ShouldRingAlarmUseCase(FakeEventSource(Result.success(emptyList())))
             .execute(alarm().copy(enabled = false), date, zone)
