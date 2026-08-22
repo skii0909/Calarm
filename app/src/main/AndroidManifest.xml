@@ -58,6 +58,10 @@
             </intent-filter>
         </receiver>
 
+        <receiver
+            android:name=".preview.NextDayPreviewReceiver"
+            android:exported="false" />
+
         <service
             android:name=".alarm.AlarmRingingService"
             android:exported="false"

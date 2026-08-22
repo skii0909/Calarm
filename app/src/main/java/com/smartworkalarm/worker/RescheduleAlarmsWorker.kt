@@ -7,6 +7,7 @@ import androidx.work.WorkerParameters
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import java.time.Clock
+import com.smartworkalarm.preview.NextDayPreviewScheduler
 
 @HiltWorker
 class RescheduleAlarmsWorker @AssistedInject constructor(
@@ -14,9 +15,11 @@ class RescheduleAlarmsWorker @AssistedInject constructor(
     @Assisted parameters: WorkerParameters,
     private val useCase: RescheduleAlarmsUseCase,
     private val clock: Clock,
+    private val previewScheduler: NextDayPreviewScheduler,
 ) : CoroutineWorker(context, parameters) {
     override suspend fun doWork(): Result = runCatching {
         useCase.execute(clock.instant())
+        previewScheduler.scheduleNext()
     }.fold(
         onSuccess = { Result.success() },
         onFailure = { Result.retry() },
