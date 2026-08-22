@@ -34,14 +34,20 @@ class AlarmExecutionCoordinatorTest {
     @Test
     fun `normal decision starts ringing after scheduling next occurrence`() = runTest {
         val events = mutableListOf<String>()
+        var ringingUri: String? = null
         val coordinator = coordinator(
+            alarm = Alarm(7, "출근", 7, 0, 31, true, true, ringtoneUri = "content://alarm/custom"),
             decision = AlarmExecutionDecision.RING,
             onSchedule = { events += "schedule" },
-            onRing = { events += "ring" },
+            onRing = { uri ->
+                events += "ring"
+                ringingUri = uri
+            },
         )
 
         assertEquals(ExecutionOutcome.Ringing, coordinator.execute(7, false, now))
         assertEquals(listOf("schedule", "ring"), events)
+        assertEquals("content://alarm/custom", ringingUri)
     }
 
     @Test
@@ -69,14 +75,14 @@ class AlarmExecutionCoordinatorTest {
         alarm: Alarm? = Alarm(7, "출근", 7, 0, 31, true, true),
         decision: AlarmExecutionDecision = AlarmExecutionDecision.RING,
         onSchedule: () -> Unit = {},
-        onRing: () -> Unit = {},
+        onRing: (String?) -> Unit = {},
     ) = AlarmExecutionCoordinator(
         repository = Repository(alarm),
         scheduler = Scheduler(onSchedule),
         calculator = CalculateNextOccurrenceUseCase(),
         decisionProvider = { _, _, _ -> decision },
         ringer = object : AlarmRinger {
-            override fun start(alarmId: Long, alarmName: String) = onRing()
+            override fun start(alarmId: Long, alarmName: String, ringtoneUri: String?) = onRing(ringtoneUri)
         },
         zoneId = zone,
     )

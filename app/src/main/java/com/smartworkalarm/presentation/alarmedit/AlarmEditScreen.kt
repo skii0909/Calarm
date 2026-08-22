@@ -1,5 +1,11 @@
 package com.smartworkalarm.presentation.alarmedit
 
+import android.app.Activity
+import android.content.Intent
+import android.media.RingtoneManager
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -26,6 +32,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import com.smartworkalarm.domain.model.RepeatDay
@@ -71,8 +78,40 @@ fun AlarmEditScreen(viewModel: AlarmEditViewModel, alarmId: Long, onDone: () -> 
             supportingText = { Text("일정 제목에 키워드가 포함되면 이 알람을 건너뜁니다.") },
             modifier = Modifier.fillMaxWidth(),
         )
+        AlarmRingtonePickerField(state.ringtoneUri, viewModel::onRingtoneChanged)
         Button(onClick = viewModel::save, modifier = Modifier.fillMaxWidth()) { Text("저장") }
         if (alarmId != 0L) OutlinedButton(onClick = { viewModel.delete() }, modifier = Modifier.fillMaxWidth()) { Text("삭제") }
+    }
+}
+
+@Suppress("DEPRECATION")
+@Composable
+private fun AlarmRingtonePickerField(ringtoneUri: String?, onSelected: (String?) -> Unit) {
+    val context = LocalContext.current
+    val title = remember(ringtoneUri) {
+        ringtoneUri?.let { uri ->
+            runCatching { RingtoneManager.getRingtone(context, Uri.parse(uri))?.getTitle(context) }.getOrNull()
+        } ?: "시스템 기본 알람음"
+    }
+    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            val picked = result.data?.getParcelableExtra<Uri>(RingtoneManager.EXTRA_RINGTONE_PICKED_URI)
+            onSelected(picked?.toString())
+        }
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("알람음")
+        OutlinedButton(
+            onClick = {
+                launcher.launch(Intent(RingtoneManager.ACTION_RINGTONE_PICKER).apply {
+                    putExtra(RingtoneManager.EXTRA_RINGTONE_TYPE, RingtoneManager.TYPE_ALARM)
+                    putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_DEFAULT, true)
+                    putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_SILENT, false)
+                    putExtra(RingtoneManager.EXTRA_RINGTONE_EXISTING_URI, ringtoneUri?.let(Uri::parse))
+                })
+            },
+            modifier = Modifier.fillMaxWidth(),
+        ) { Text(title) }
     }
 }
 
