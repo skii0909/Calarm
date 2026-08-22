@@ -6,6 +6,7 @@ import com.smartworkalarm.domain.model.Alarm
 import com.smartworkalarm.domain.model.RepeatDay
 import com.smartworkalarm.domain.repository.AlarmRepository
 import com.smartworkalarm.domain.usecase.DeleteAlarmUseCase
+import com.smartworkalarm.domain.usecase.CalendarKeywordMatcher
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -95,7 +96,7 @@ class AlarmEditViewModel @Inject constructor(
         repeatDaysMask,
         enabled,
         skipOnCalendarMatch,
-        calendarKeywords.split(',').map(String::trim).filter(String::isNotEmpty),
+        CalendarKeywordMatcher.normalize(calendarKeywords),
         ringtoneUri,
     )
 
