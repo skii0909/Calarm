@@ -5,6 +5,7 @@ import androidx.sqlite.db.framework.FrameworkSQLiteOpenHelperFactory
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.smartworkalarm.di.MIGRATION_1_2
+import com.smartworkalarm.di.MIGRATION_2_3
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Rule
@@ -38,6 +39,21 @@ class AlarmMigrationTest {
             assertEquals(7, cursor.getInt(cursor.getColumnIndexOrThrow("hour")))
             assertEquals("휴가", cursor.getString(cursor.getColumnIndexOrThrow("calendar_keywords")))
             assertNull(cursor.getString(cursor.getColumnIndexOrThrow("ringtone_uri")))
+        }
+        db.close()
+    }
+
+    @Test
+    fun migrationFrom2To3AddsPreviewStateTable() {
+        helper.createDatabase("migration-2-3", 2).close()
+        val db = helper.runMigrationsAndValidate("migration-2-3", 3, true, MIGRATION_2_3)
+        db.execSQL(
+            "INSERT INTO alarm_preview_states (alarm_id,decision,target_date,updated_at) " +
+                "VALUES (8,'SKIP','2026-08-23',123)",
+        )
+        db.query("SELECT decision FROM alarm_preview_states WHERE alarm_id = 8").use { cursor ->
+            cursor.moveToFirst()
+            assertEquals("SKIP", cursor.getString(0))
         }
         db.close()
     }
