@@ -35,7 +35,7 @@ class ShouldRingAlarmUseCaseTest {
     @Test
     fun `alarm not configured for vacation does not query calendar`() = runTest {
         val source = FakeEventSource(Result.failure(IllegalStateException()))
-        val decision = ShouldRingAlarmUseCase(source).execute(alarm().copy(skipOnVacation = false), date, zone)
+        val decision = ShouldRingAlarmUseCase(source).execute(alarm().copy(skipOnCalendarMatch = false), date, zone)
 
         assertEquals(AlarmExecutionDecision.RING, decision)
         assertEquals(0, source.queryCount)

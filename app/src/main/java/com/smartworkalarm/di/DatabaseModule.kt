@@ -2,6 +2,8 @@ package com.smartworkalarm.di
 
 import android.content.Context
 import androidx.room.Room
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import com.smartworkalarm.data.local.AlarmDao
 import com.smartworkalarm.data.local.WorkAlarmDatabase
 import com.smartworkalarm.data.repository.AlarmRepositoryImpl
@@ -27,8 +29,17 @@ object DatabaseModule {
     @Provides
     @Singleton
     fun provideDatabase(@ApplicationContext context: Context): WorkAlarmDatabase =
-        Room.databaseBuilder(context, WorkAlarmDatabase::class.java, "work-alarm.db").build()
+        Room.databaseBuilder(context, WorkAlarmDatabase::class.java, "work-alarm.db")
+            .addMigrations(MIGRATION_1_2)
+            .build()
 
     @Provides
     fun provideAlarmDao(database: WorkAlarmDatabase): AlarmDao = database.alarmDao()
+}
+
+val MIGRATION_1_2 = object : Migration(1, 2) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE alarms ADD COLUMN calendar_keywords TEXT NOT NULL DEFAULT '휴가'")
+        db.execSQL("ALTER TABLE alarms ADD COLUMN ringtone_uri TEXT DEFAULT NULL")
+    }
 }

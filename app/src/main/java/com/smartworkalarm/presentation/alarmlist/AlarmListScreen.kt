@@ -90,7 +90,7 @@ private fun AlarmRow(alarm: Alarm, onEdit: (Long) -> Unit, onEnabled: (Long, Boo
                 Text("%02d:%02d".format(alarm.hour, alarm.minute), style = MaterialTheme.typography.headlineSmall)
                 Text(alarm.name)
                 Text(repeatSummary(alarm.repeatDaysMask), style = MaterialTheme.typography.bodySmall)
-                if (alarm.skipOnVacation) Text("휴가 시 건너뜀", style = MaterialTheme.typography.labelMedium)
+                if (alarm.skipOnCalendarMatch) Text("캘린더 일정에 따라 건너뜀", style = MaterialTheme.typography.labelMedium)
             }
             Switch(checked = alarm.enabled, onCheckedChange = { onEnabled(alarm.id, it) })
         }

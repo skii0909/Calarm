@@ -9,7 +9,9 @@ fun Alarm.toEntity(createdAt: Long) = AlarmEntity(
     minute = minute,
     repeatDaysMask = repeatDaysMask,
     enabled = enabled,
-    skipOnVacation = skipOnVacation,
+    skipOnCalendarMatch = skipOnCalendarMatch,
+    calendarKeywords = calendarKeywords.joinToString(","),
+    ringtoneUri = ringtoneUri,
     createdAt = createdAt,
 )
 
@@ -20,5 +22,7 @@ fun AlarmEntity.toDomain() = Alarm(
     minute = minute,
     repeatDaysMask = repeatDaysMask,
     enabled = enabled,
-    skipOnVacation = skipOnVacation,
+    skipOnCalendarMatch = skipOnCalendarMatch,
+    calendarKeywords = calendarKeywords.split(',').map(String::trim).filter(String::isNotEmpty),
+    ringtoneUri = ringtoneUri,
 )

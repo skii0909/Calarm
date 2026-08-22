@@ -45,12 +45,12 @@ class AlarmEditViewModelTest {
         viewModel.onNameChanged("출근")
         viewModel.onTimeChanged(7, 0)
         viewModel.toggleDay(RepeatDay.MONDAY)
-        viewModel.onSkipOnVacationChanged(true)
+        viewModel.onSkipOnCalendarMatchChanged(true)
 
         viewModel.save()
         advanceUntilIdle()
 
-        assertTrue(saver.saved.single().skipOnVacation)
+        assertTrue(saver.saved.single().skipOnCalendarMatch)
     }
 
     private class FakeSaver : AlarmSaver {

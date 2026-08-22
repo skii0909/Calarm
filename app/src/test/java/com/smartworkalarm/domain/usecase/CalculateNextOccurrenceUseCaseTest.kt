@@ -66,7 +66,7 @@ class CalculateNextOccurrenceUseCaseTest {
         minute = minute,
         repeatDaysMask = days.fold(0) { mask, day -> mask or day.bit },
         enabled = true,
-        skipOnVacation = true,
+        skipOnCalendarMatch = true,
     )
 
     private fun instant(year: Int, month: Int, day: Int, hour: Int, minute: Int) =

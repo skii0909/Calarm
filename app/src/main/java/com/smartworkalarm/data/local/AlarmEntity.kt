@@ -12,6 +12,8 @@ data class AlarmEntity(
     val minute: Int,
     @ColumnInfo(name = "repeat_days_mask") val repeatDaysMask: Int,
     val enabled: Boolean,
-    @ColumnInfo(name = "skip_on_vacation") val skipOnVacation: Boolean,
+    @ColumnInfo(name = "skip_on_vacation") val skipOnCalendarMatch: Boolean,
+    @ColumnInfo(name = "calendar_keywords", defaultValue = "'휴가'") val calendarKeywords: String = "휴가",
+    @ColumnInfo(name = "ringtone_uri", defaultValue = "NULL") val ringtoneUri: String? = null,
     @ColumnInfo(name = "created_at") val createdAt: Long,
 )

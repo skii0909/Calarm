@@ -7,7 +7,17 @@ import org.junit.Test
 class AlarmEntityMapperTest {
     @Test
     fun `entity round trip preserves user settings`() {
-        val alarm = Alarm(4, "출근", 7, 0, 31, true, true)
+        val alarm = Alarm(
+            id = 4,
+            name = "출근",
+            hour = 7,
+            minute = 0,
+            repeatDaysMask = 31,
+            enabled = true,
+            skipOnCalendarMatch = true,
+            calendarKeywords = listOf("휴가", "연차"),
+            ringtoneUri = "content://media/alarm/7",
+        )
 
         val entity = alarm.toEntity(createdAt = 123L)
 

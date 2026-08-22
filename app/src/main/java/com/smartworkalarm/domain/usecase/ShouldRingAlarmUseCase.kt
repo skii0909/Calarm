@@ -16,7 +16,7 @@ class ShouldRingAlarmUseCase @Inject constructor(
         zoneId: ZoneId,
     ): AlarmExecutionDecision {
         if (!alarm.enabled) return AlarmExecutionDecision.DO_NOT_RING
-        if (!alarm.skipOnVacation) return AlarmExecutionDecision.RING
+        if (!alarm.skipOnCalendarMatch) return AlarmExecutionDecision.RING
 
         val start = date.atStartOfDay(zoneId).toInstant()
         val end = date.plusDays(1).atStartOfDay(zoneId).toInstant()

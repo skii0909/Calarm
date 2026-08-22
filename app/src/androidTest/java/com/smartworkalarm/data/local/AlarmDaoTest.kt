@@ -41,7 +41,7 @@ class AlarmDaoTest {
         dao.setEnabled(lateId, false)
         val updated = dao.getById(lateId)!!
         assertFalse(updated.enabled)
-        assertTrue(updated.skipOnVacation)
+        assertTrue(updated.skipOnCalendarMatch)
 
         dao.delete(earlyId)
         assertEquals(listOf(lateId), dao.observeAll().first().map { it.id })
@@ -53,7 +53,7 @@ class AlarmDaoTest {
         minute = 0,
         repeatDaysMask = 31,
         enabled = true,
-        skipOnVacation = skipOnVacation,
+        skipOnCalendarMatch = skipOnVacation,
         createdAt = 1,
     )
 }

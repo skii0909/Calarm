@@ -21,7 +21,9 @@ data class AlarmEditState(
     val minute: Int = 0,
     val repeatDaysMask: Int = 0,
     val enabled: Boolean = true,
-    val skipOnVacation: Boolean = true,
+    val skipOnCalendarMatch: Boolean = true,
+    val calendarKeywords: String = "휴가",
+    val ringtoneUri: String? = null,
     val nameError: String? = null,
     val repeatDaysError: String? = null,
     val saved: Boolean = false,
@@ -47,7 +49,9 @@ class AlarmEditViewModel @Inject constructor(
                     minute = alarm.minute,
                     repeatDaysMask = alarm.repeatDaysMask,
                     enabled = alarm.enabled,
-                    skipOnVacation = alarm.skipOnVacation,
+                    skipOnCalendarMatch = alarm.skipOnCalendarMatch,
+                    calendarKeywords = alarm.calendarKeywords.joinToString(", "),
+                    ringtoneUri = alarm.ringtoneUri,
                 )
             }
         }
@@ -56,7 +60,9 @@ class AlarmEditViewModel @Inject constructor(
     fun onNameChanged(value: String) = _state.update { it.copy(name = value, nameError = null) }
     fun onTimeChanged(hour: Int, minute: Int) = _state.update { it.copy(hour = hour.coerceIn(0, 23), minute = minute.coerceIn(0, 59)) }
     fun onEnabledChanged(value: Boolean) = _state.update { it.copy(enabled = value) }
-    fun onSkipOnVacationChanged(value: Boolean) = _state.update { it.copy(skipOnVacation = value) }
+    fun onSkipOnCalendarMatchChanged(value: Boolean) = _state.update { it.copy(skipOnCalendarMatch = value) }
+    fun onCalendarKeywordsChanged(value: String) = _state.update { it.copy(calendarKeywords = value) }
+    fun onRingtoneChanged(value: String?) = _state.update { it.copy(ringtoneUri = value) }
     fun toggleDay(day: RepeatDay) = _state.update {
         it.copy(repeatDaysMask = it.repeatDaysMask xor day.bit, repeatDaysError = null)
     }
@@ -81,6 +87,16 @@ class AlarmEditViewModel @Inject constructor(
         _state.update { it.copy(saved = true) }
     }
 
-    private fun AlarmEditState.toAlarm() = Alarm(id, name, hour, minute, repeatDaysMask, enabled, skipOnVacation)
+    private fun AlarmEditState.toAlarm() = Alarm(
+        id,
+        name,
+        hour,
+        minute,
+        repeatDaysMask,
+        enabled,
+        skipOnCalendarMatch,
+        calendarKeywords.split(',').map(String::trim).filter(String::isNotEmpty),
+        ringtoneUri,
+    )
 
 }

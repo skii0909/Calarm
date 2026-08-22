@@ -9,7 +9,9 @@ data class Alarm(
     val minute: Int,
     val repeatDaysMask: Int,
     val enabled: Boolean,
-    val skipOnVacation: Boolean,
+    val skipOnCalendarMatch: Boolean,
+    val calendarKeywords: List<String> = listOf("휴가"),
+    val ringtoneUri: String? = null,
 ) {
     fun repeatsOn(dayOfWeek: DayOfWeek): Boolean {
         val bit = 1 shl (dayOfWeek.value - 1)

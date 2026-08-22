@@ -66,7 +66,7 @@ fun AlarmEditScreen(viewModel: AlarmEditViewModel, alarmId: Long, onDone: () -> 
         }
         state.repeatDaysError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         SettingSwitch("알람 활성화", state.enabled, viewModel::onEnabledChanged)
-        SettingSwitch("휴가 일정에는 이 알람 건너뛰기", state.skipOnVacation, viewModel::onSkipOnVacationChanged)
+        SettingSwitch("캘린더 일정에 따라 건너뛰기", state.skipOnCalendarMatch, viewModel::onSkipOnCalendarMatchChanged)
         Button(onClick = viewModel::save, modifier = Modifier.fillMaxWidth()) { Text("저장") }
         if (alarmId != 0L) OutlinedButton(onClick = { viewModel.delete() }, modifier = Modifier.fillMaxWidth()) { Text("삭제") }
     }
