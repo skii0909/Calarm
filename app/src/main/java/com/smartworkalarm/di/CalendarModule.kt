@@ -3,6 +3,8 @@ package com.smartworkalarm.di
 import android.content.ContentResolver
 import android.content.Context
 import com.smartworkalarm.data.calendar.CalendarContractEventSource
+import com.smartworkalarm.data.calendar.CalendarContractConnectionRepository
+import com.smartworkalarm.domain.repository.CalendarConnectionRepository
 import com.smartworkalarm.domain.repository.CalendarEventSource
 import dagger.Binds
 import dagger.Module
@@ -14,6 +16,11 @@ import dagger.hilt.components.SingletonComponent
 @Module
 @InstallIn(SingletonComponent::class)
 abstract class CalendarBindings {
+    @Binds
+    abstract fun bindCalendarConnectionRepository(
+        implementation: CalendarContractConnectionRepository,
+    ): CalendarConnectionRepository
+
     @Binds
     abstract fun bindCalendarEventSource(
         implementation: CalendarContractEventSource,
