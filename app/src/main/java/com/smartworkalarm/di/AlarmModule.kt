@@ -1,0 +1,49 @@
+package com.smartworkalarm.di
+
+import android.app.AlarmManager
+import android.content.Context
+import com.smartworkalarm.alarm.AlarmSchedulerImpl
+import com.smartworkalarm.alarm.AlarmRinger
+import com.smartworkalarm.alarm.AlarmRingerImpl
+import com.smartworkalarm.domain.usecase.SaveAlarmUseCase
+import com.smartworkalarm.presentation.alarmedit.AlarmSaver
+import com.smartworkalarm.domain.repository.AlarmScheduler
+import dagger.Binds
+import dagger.Module
+import dagger.Provides
+import dagger.hilt.InstallIn
+import dagger.hilt.android.qualifiers.ApplicationContext
+import dagger.hilt.components.SingletonComponent
+import java.time.Clock
+import java.time.ZoneId
+
+@Module
+@InstallIn(SingletonComponent::class)
+abstract class AlarmBindings {
+    @Binds
+    abstract fun bindAlarmScheduler(implementation: AlarmSchedulerImpl): AlarmScheduler
+
+    @Binds
+    abstract fun bindAlarmRinger(implementation: AlarmRingerImpl): AlarmRinger
+
+    @Binds
+    abstract fun bindAlarmSaver(implementation: SaveAlarmUseCase): AlarmSaver
+}
+
+@Module
+@InstallIn(SingletonComponent::class)
+object AlarmModule {
+    @Provides
+    fun provideAlarmManager(@ApplicationContext context: Context): AlarmManager =
+        context.getSystemService(AlarmManager::class.java)
+
+    @Provides
+    fun provideNotificationManager(@ApplicationContext context: Context): android.app.NotificationManager =
+        context.getSystemService(android.app.NotificationManager::class.java)
+
+    @Provides
+    fun provideZoneId(): ZoneId = ZoneId.systemDefault()
+
+    @Provides
+    fun provideClock(zoneId: ZoneId): Clock = Clock.system(zoneId)
+}
