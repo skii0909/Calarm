@@ -34,7 +34,7 @@ import com.smartworkalarm.domain.model.Alarm
 import com.smartworkalarm.domain.model.RepeatDay
 
 @Composable
-fun AlarmListScreen(viewModel: AlarmListViewModel, onAdd: () -> Unit, onEdit: (Long) -> Unit) {
+fun AlarmListScreen(viewModel: AlarmListViewModel, onAdd: () -> Unit, onEdit: (Long) -> Unit, onSettings: () -> Unit) {
     val alarms by viewModel.alarms.collectAsState()
     val context = LocalContext.current
     val alarmManager = context.getSystemService(AlarmManager::class.java)
@@ -52,7 +52,12 @@ fun AlarmListScreen(viewModel: AlarmListViewModel, onAdd: () -> Unit, onEdit: (L
         floatingActionButton = { FloatingActionButton(onClick = onAdd) { Text("+") } },
     ) { padding ->
         LazyColumn(modifier = Modifier.fillMaxSize().padding(padding).padding(16.dp)) {
-            item { Text("내 알람", style = MaterialTheme.typography.headlineMedium) }
+            item {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text("내 알람", style = MaterialTheme.typography.headlineMedium, modifier = Modifier.weight(1f))
+                    Button(onClick = onSettings) { Text("설정") }
+                }
+            }
             if (exactMissing) item {
                 PermissionCard("정확한 알람 권한이 필요합니다") {
                     context.startActivity(Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, Uri.parse("package:${context.packageName}")))

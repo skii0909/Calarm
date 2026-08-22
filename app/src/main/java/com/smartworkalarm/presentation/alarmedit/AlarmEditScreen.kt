@@ -75,7 +75,7 @@ fun AlarmEditScreen(viewModel: AlarmEditViewModel, alarmId: Long, onDone: () -> 
             enabled = state.skipOnCalendarMatch,
             label = { Text("건너뛸 일정 키워드") },
             placeholder = { Text("휴가, 연차, 병가") },
-            supportingText = { Text("일정 제목에 키워드가 포함되면 이 알람을 건너뜁니다.") },
+            supportingText = { Text("여러 키워드는 쉼표(,)로 구분하세요. 일정 제목에 키워드가 하나라도 포함되면 이 알람을 건너뜁니다.") },
             modifier = Modifier.fillMaxWidth(),
         )
         AlarmRingtonePickerField(state.ringtoneUri, viewModel::onRingtoneChanged)
