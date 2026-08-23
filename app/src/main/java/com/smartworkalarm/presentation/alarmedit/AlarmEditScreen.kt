@@ -122,7 +122,7 @@ fun AlarmEditScreen(viewModel: AlarmEditViewModel, alarmId: Long, onDone: () -> 
 
 @Suppress("DEPRECATION")
 @Composable
-private fun AlarmRingtonePickerField(ringtoneUri: String?, onSelected: (String?) -> Unit) {
+fun AlarmRingtonePickerField(ringtoneUri: String?, onSelected: (String?) -> Unit) {
     val context = LocalContext.current
     val title = remember(ringtoneUri) {
         ringtoneUri?.let { uri ->
@@ -182,7 +182,7 @@ private fun AlarmRingtonePickerField(ringtoneUri: String?, onSelected: (String?)
 }
 
 @Composable
-private fun readableTextFieldColors() = OutlinedTextFieldDefaults.colors(
+fun readableTextFieldColors() = OutlinedTextFieldDefaults.colors(
     focusedTextColor = androidx.compose.ui.graphics.Color.White,
     unfocusedTextColor = androidx.compose.ui.graphics.Color.White,
     disabledTextColor = androidx.compose.ui.graphics.Color.White,
@@ -255,7 +255,7 @@ private fun dayLabel(day: RepeatDay): String = when (day) {
 }
 
 @Composable
-private fun SettingSwitch(label: String, checked: Boolean, onChange: (Boolean) -> Unit, bright: Boolean = false) {
+fun SettingSwitch(label: String, checked: Boolean, onChange: (Boolean) -> Unit, bright: Boolean = false) {
     Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Text(label, modifier = Modifier.weight(1f), color = if (bright) androidx.compose.ui.graphics.Color.White else MaterialTheme.colorScheme.onSurface)
         Switch(checked = checked, onCheckedChange = onChange)

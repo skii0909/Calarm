@@ -16,6 +16,8 @@ import com.smartworkalarm.presentation.onboarding.OnboardingScreen
 import com.smartworkalarm.presentation.calendar.CalendarConnectionPrompt
 import com.smartworkalarm.presentation.calendar.CalendarConnectionViewModel
 import com.smartworkalarm.presentation.settings.SettingsScreen
+import com.smartworkalarm.presentation.shift.ShiftGroupScreen
+import com.smartworkalarm.presentation.shift.ShiftTypeEditScreen
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.collectAsState
@@ -45,8 +47,11 @@ fun WorkAlarmNavHost() {
         composable(ALARMS) {
             AlarmListScreen(
                 viewModel = hiltViewModel(),
+                shiftViewModel = hiltViewModel(),
                 onAdd = { navController.navigate("alarm/0") },
                 onEdit = { navController.navigate("alarm/$it") },
+                onAddShiftGroup = { navController.navigate("shift-group/0") },
+                onEditShiftGroup = { navController.navigate("shift-group/$it") },
                 onSettings = { navController.navigate(SETTINGS) },
             )
         }
@@ -62,6 +67,38 @@ fun WorkAlarmNavHost() {
         }
         composable(SETTINGS) {
             SettingsScreen(connectionState) { navController.popBackStack() }
+        }
+        composable(
+            route = "shift-group/{groupId}",
+            arguments = listOf(navArgument("groupId") { type = NavType.LongType }),
+        ) { entry ->
+            val routeGroupId = entry.arguments?.getLong("groupId") ?: 0L
+            ShiftGroupScreen(
+                viewModel = hiltViewModel(),
+                groupId = routeGroupId,
+                onDone = { navController.popBackStack() },
+                onEditShiftType = { groupId, shiftTypeId ->
+                    if (routeGroupId == 0L) {
+                        navController.popBackStack()
+                        navController.navigate("shift-group/$groupId")
+                    }
+                    navController.navigate("shift-type/$groupId/$shiftTypeId")
+                },
+            )
+        }
+        composable(
+            route = "shift-type/{groupId}/{shiftTypeId}",
+            arguments = listOf(
+                navArgument("groupId") { type = NavType.LongType },
+                navArgument("shiftTypeId") { type = NavType.LongType },
+            ),
+        ) { entry ->
+            ShiftTypeEditScreen(
+                viewModel = hiltViewModel(),
+                groupId = entry.arguments?.getLong("groupId") ?: 0L,
+                shiftTypeId = entry.arguments?.getLong("shiftTypeId") ?: 0L,
+                onDone = { navController.popBackStack() },
+            )
         }
     }
     }

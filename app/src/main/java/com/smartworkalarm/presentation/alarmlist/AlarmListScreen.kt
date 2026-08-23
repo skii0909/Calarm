@@ -39,10 +39,22 @@ import com.smartworkalarm.domain.model.Alarm
 import com.smartworkalarm.domain.model.RepeatDay
 import com.smartworkalarm.presentation.components.FeaturePill
 import com.smartworkalarm.presentation.components.GradientHero
+import com.smartworkalarm.presentation.shift.ShiftGroupListItem
+import com.smartworkalarm.presentation.shift.ShiftGroupListViewModel
+import com.smartworkalarm.presentation.shift.todayStatus
 
 @Composable
-fun AlarmListScreen(viewModel: AlarmListViewModel, onAdd: () -> Unit, onEdit: (Long) -> Unit, onSettings: () -> Unit) {
+fun AlarmListScreen(
+    viewModel: AlarmListViewModel,
+    shiftViewModel: ShiftGroupListViewModel,
+    onAdd: () -> Unit,
+    onEdit: (Long) -> Unit,
+    onAddShiftGroup: () -> Unit,
+    onEditShiftGroup: (Long) -> Unit,
+    onSettings: () -> Unit,
+) {
     val alarms by viewModel.alarms.collectAsState()
+    val shiftGroups by shiftViewModel.groups.collectAsState()
     val context = LocalContext.current
     val alarmManager = context.getSystemService(AlarmManager::class.java)
     val exactMissing = Build.VERSION.SDK_INT >= 31 && !alarmManager.canScheduleExactAlarms()
@@ -97,16 +109,70 @@ fun AlarmListScreen(viewModel: AlarmListViewModel, onAdd: () -> Unit, onEdit: (L
             if (notificationMissing) item {
                 PermissionCard("알람 알림 권한이 필요합니다", appSettings)
             }
+            item {
+                Row(
+                    Modifier.fillMaxWidth().padding(top = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text("교대 알람 그룹", style = MaterialTheme.typography.titleLarge)
+                        Text("캘린더 근무 형태에 맞는 알람 하나를 적용합니다", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Button(onClick = onAddShiftGroup) { Text("＋ 그룹") }
+                }
+            }
+            if (shiftGroups.isEmpty()) item {
+                Card(Modifier.fillMaxWidth()) {
+                    Text("교대 근무가 있다면 그룹을 만들고 근무 형태를 2개 이상 추가하세요.", Modifier.padding(16.dp))
+                }
+            }
+            items(shiftGroups, key = { "shift-${it.group.id}" }) { item ->
+                ShiftGroupRow(item) { onEditShiftGroup(item.group.id) }
+            }
+            item {
+                Text("일반 알람", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 14.dp))
+                Text("교대 그룹과 별도로 항상 독립적으로 동작합니다", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
             if (alarms.isEmpty()) item {
                 GradientHero {
                     Text("좋은 아침을 준비해 볼까요?", style = MaterialTheme.typography.headlineSmall, color = Color.White)
                     Text("＋ 버튼을 눌러 첫 출근 알람을 만들어 보세요.", color = Color.White.copy(alpha = .8f))
                 }
             }
-            if (alarms.isNotEmpty()) item { Text("모든 알람", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 8.dp)) }
             items(alarms, key = { it.id }) { alarm ->
                 AlarmRow(alarm, onEdit, viewModel::setEnabled)
             }
+        }
+    }
+}
+
+@Composable
+private fun ShiftGroupRow(item: ShiftGroupListItem, onClick: () -> Unit) {
+    val matched = item.todayEvaluation as? com.smartworkalarm.domain.shift.ShiftDayEvaluation.Matched
+    val next = item.shiftTypes.firstOrNull { it.id == matched?.shiftTypeId }
+        ?: item.shiftTypes.firstOrNull { it.id == item.group.emergencyShiftTypeId }
+    val warning = item.todayEvaluation is com.smartworkalarm.domain.shift.ShiftDayEvaluation.Conflict ||
+        item.todayEvaluation == com.smartworkalarm.domain.shift.ShiftDayEvaluation.None ||
+        item.todayEvaluation == com.smartworkalarm.domain.shift.ShiftDayEvaluation.ReadFailure
+    Card(
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
+        shape = MaterialTheme.shapes.extraLarge,
+        colors = CardDefaults.cardColors(
+            containerColor = if (warning) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.surface,
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+    ) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text(item.group.name, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                Switch(checked = item.group.enabled, onCheckedChange = null)
+            }
+            Text("오늘 근무 · ${todayStatus(item.todayEvaluation)}", color = MaterialTheme.colorScheme.secondary)
+            Text(
+                next?.let { "다음 알람 · %02d:%02d ${it.name}".format(it.hour, it.minute) } ?: "다음 알람 · 없음",
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            Text("근무 형태 ${item.shiftTypes.size}개 · ${if (warning) "캘린더 확인 필요" else "캘린더 연결됨"}", style = MaterialTheme.typography.bodySmall)
         }
     }
 }
