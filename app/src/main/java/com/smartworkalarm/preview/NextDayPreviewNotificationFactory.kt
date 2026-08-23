@@ -17,8 +17,12 @@ class NextDayPreviewNotificationFactory @Inject constructor(
     @param:ApplicationContext private val context: Context,
     private val manager: NotificationManager,
 ) {
-    fun post(changes: List<AlarmPreviewChange>) {
-        if (changes.isEmpty()) return
+    fun post(
+        alarmChanges: List<AlarmPreviewChange>,
+        shiftChanges: List<ShiftPreviewChange> = emptyList(),
+    ) {
+        val rows = alarmChanges.map(PreviewNotificationText::row) + shiftChanges.map(ShiftPreviewNotificationText::row)
+        if (rows.isEmpty()) return
         manager.createNotificationChannel(
             NotificationChannel(CHANNEL_ID, "다음 날 알람 변경", NotificationManager.IMPORTANCE_DEFAULT).apply {
                 enableVibration(true)
@@ -28,7 +32,7 @@ class NextDayPreviewNotificationFactory @Inject constructor(
                 )
             },
         )
-        val text = PreviewNotificationText.format(changes)
+        val text = format(rows)
         val openApp = PendingIntent.getActivity(
             context,
             0,
@@ -45,6 +49,16 @@ class NextDayPreviewNotificationFactory @Inject constructor(
                 .setContentIntent(openApp)
                 .setAutoCancel(true)
                 .build(),
+        )
+    }
+
+    private fun format(rows: List<String>): PreviewNotificationContent = if (rows.size == 1) {
+        PreviewNotificationContent("내일 알람 변경", rows.single(), rows.single())
+    } else {
+        PreviewNotificationContent(
+            "내일 알람 ${rows.size}개 변경",
+            "캘린더 일정에 따른 변경 내용을 확인하세요.",
+            rows.joinToString("\n"),
         )
     }
 

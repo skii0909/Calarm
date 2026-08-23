@@ -27,7 +27,7 @@ object PreviewNotificationText {
         }
     }
 
-    private fun row(change: AlarmPreviewChange): String {
+    fun row(change: AlarmPreviewChange): String {
         val time = koreanTime(change.alarm.hour, change.alarm.minute)
         return when (change.type) {
             PreviewChangeType.SKIPPED -> "${reason(change)} $time ‘${change.alarm.name}’이 울리지 않습니다."
