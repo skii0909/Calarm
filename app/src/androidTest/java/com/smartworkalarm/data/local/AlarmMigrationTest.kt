@@ -6,6 +6,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.smartworkalarm.di.MIGRATION_1_2
 import com.smartworkalarm.di.MIGRATION_2_3
+import com.smartworkalarm.di.MIGRATION_3_4
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Rule
@@ -54,6 +55,23 @@ class AlarmMigrationTest {
         db.query("SELECT decision FROM alarm_preview_states WHERE alarm_id = 8").use { cursor ->
             cursor.moveToFirst()
             assertEquals("SKIP", cursor.getString(0))
+        }
+        db.close()
+    }
+
+    @Test
+    fun migrationFrom3To4AddsAlarmControlDefaults() {
+        helper.createDatabase("migration-3-4", 3).close()
+        val db = helper.runMigrationsAndValidate("migration-3-4", 4, true, MIGRATION_3_4)
+        db.query("PRAGMA table_info(alarms)").use { cursor ->
+            val defaults = mutableMapOf<String, String?>()
+            while (cursor.moveToNext()) {
+                defaults[cursor.getString(cursor.getColumnIndexOrThrow("name"))] =
+                    cursor.getString(cursor.getColumnIndexOrThrow("dflt_value"))
+            }
+            assertEquals("0", defaults["skip_on_public_holiday"])
+            assertEquals("0", defaults["gradual_volume"])
+            assertEquals("5", defaults["snooze_minutes"])
         }
         db.close()
     }

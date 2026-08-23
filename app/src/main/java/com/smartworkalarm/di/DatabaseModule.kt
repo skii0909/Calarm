@@ -31,7 +31,7 @@ object DatabaseModule {
     @Singleton
     fun provideDatabase(@ApplicationContext context: Context): WorkAlarmDatabase =
         Room.databaseBuilder(context, WorkAlarmDatabase::class.java, "work-alarm.db")
-            .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
             .build()
 
     @Provides
@@ -50,6 +50,14 @@ val MIGRATION_2_3 = object : Migration(2, 3) {
                 "target_date TEXT NOT NULL, " +
                 "updated_at INTEGER NOT NULL)",
         )
+    }
+}
+
+val MIGRATION_3_4 = object : Migration(3, 4) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE alarms ADD COLUMN skip_on_public_holiday INTEGER NOT NULL DEFAULT 0")
+        db.execSQL("ALTER TABLE alarms ADD COLUMN gradual_volume INTEGER NOT NULL DEFAULT 0")
+        db.execSQL("ALTER TABLE alarms ADD COLUMN snooze_minutes INTEGER NOT NULL DEFAULT 5")
     }
 }
 
