@@ -7,6 +7,7 @@ import com.smartworkalarm.domain.model.ShiftAlarmGroup
 import com.smartworkalarm.domain.model.ShiftTypeAlarm
 import com.smartworkalarm.domain.repository.CalendarEventSource
 import com.smartworkalarm.domain.repository.ShiftAlarmRepository
+import com.smartworkalarm.domain.shift.ShiftDayEvaluation
 import com.smartworkalarm.domain.shift.ShiftDayEvaluator
 import java.time.Clock
 import java.time.Instant
@@ -21,7 +22,8 @@ import org.junit.Test
 
 class EvaluateNextDayShiftGroupsUseCaseTest {
     private val zone = ZoneId.of("Asia/Seoul")
-    private val date = LocalDate.of(2026, 8, 24)
+    private val today = LocalDate.of(2026, 8, 24)
+    private val tomorrow = today.plusDays(1)
     private val group = ShiftAlarmGroup(10, "교대", true, emergencyShiftTypeId = 1)
     private val day = shiftType(1, "주간")
     private val night = shiftType(2, "야간")
@@ -31,42 +33,52 @@ class EvaluateNextDayShiftGroupsUseCaseTest {
 
     @Test
     fun `same night shift on consecutive days emits no change`() = runTest {
-        previews.save(group.id, "MATCHED:2")
-        calendar.eventsByDate[date] = listOf(event("야간"))
+        calendar.eventsByDate[today] = listOf(event(today, "야간"))
+        calendar.eventsByDate[tomorrow] = listOf(event(tomorrow, "야간"))
 
-        assertTrue(useCase.execute(date, zone).isEmpty())
+        assertTrue(useCase.execute(today, tomorrow, zone).isEmpty())
         assertEquals("MATCHED:2", previews.get(group.id)?.stateKey)
     }
 
     @Test
-    fun `first observed shift state is stored without a change notification`() = runTest {
-        calendar.eventsByDate[date] = listOf(event("야간"))
+    fun `first setup with no shift today and night tomorrow emits a change`() = runTest {
+        calendar.eventsByDate[tomorrow] = listOf(event(tomorrow, "야간"))
 
-        assertTrue(useCase.execute(date, zone).isEmpty())
-        assertEquals("MATCHED:2", previews.get(group.id)?.stateKey)
+        val change = useCase.execute(today, tomorrow, zone).single()
+
+        assertEquals("NONE", change.previousKey)
+        assertEquals("MATCHED:2", change.currentKey)
+    }
+
+    @Test
+    fun `today calendar modification is evaluated instead of persisted preview state`() = runTest {
+        previews.save(group.id, "MATCHED:2")
+        calendar.eventsByDate[today] = listOf(event(today, "주간"))
+        calendar.eventsByDate[tomorrow] = listOf(event(tomorrow, "야간"))
+
+        val change = useCase.execute(today, tomorrow, zone).single()
+
+        assertEquals("MATCHED:1", change.previousKey)
+        assertEquals("MATCHED:2", change.currentKey)
     }
 
     @Test
     fun `different matched shift emits the current shift`() = runTest {
-        previews.save(group.id, "MATCHED:2")
-        calendar.eventsByDate[date] = listOf(event("주간"))
+        calendar.eventsByDate[today] = listOf(event(today, "야간"))
+        calendar.eventsByDate[tomorrow] = listOf(event(tomorrow, "주간"))
 
-        val change = useCase.execute(date, zone).single()
+        val change = useCase.execute(today, tomorrow, zone).single()
 
         assertEquals("MATCHED:2", change.previousKey)
         assertEquals("MATCHED:1", change.currentKey)
-        assertEquals(
-            com.smartworkalarm.domain.shift.ShiftDayEvaluation.Matched(1, "주간"),
-            change.currentEvaluation,
-        )
+        assertEquals(ShiftDayEvaluation.Matched(1, "주간"), change.currentEvaluation)
     }
 
     @Test
     fun `starting a shift after no shift emits a change`() = runTest {
-        previews.save(group.id, "NONE")
-        calendar.eventsByDate[date] = listOf(event("야간"))
+        calendar.eventsByDate[tomorrow] = listOf(event(tomorrow, "야간"))
 
-        val change = useCase.execute(date, zone).single()
+        val change = useCase.execute(today, tomorrow, zone).single()
 
         assertEquals("NONE", change.previousKey)
         assertEquals("MATCHED:2", change.currentKey)
@@ -74,9 +86,9 @@ class EvaluateNextDayShiftGroupsUseCaseTest {
 
     @Test
     fun `ending a shift emits no shift state`() = runTest {
-        previews.save(group.id, "MATCHED:2")
+        calendar.eventsByDate[today] = listOf(event(today, "야간"))
 
-        val change = useCase.execute(date, zone).single()
+        val change = useCase.execute(today, tomorrow, zone).single()
 
         assertEquals("MATCHED:2", change.previousKey)
         assertEquals("NONE", change.currentKey)
@@ -84,34 +96,47 @@ class EvaluateNextDayShiftGroupsUseCaseTest {
 
     @Test
     fun `unchanged conflict ids do not repeat when event order changes`() = runTest {
-        previews.save(group.id, "CONFLICT:1,2")
-        calendar.eventsByDate[date] = listOf(event("야간"), event("주간"), event("야간"))
+        calendar.eventsByDate[today] = listOf(event(today, "주간"), event(today, "야간"))
+        calendar.eventsByDate[tomorrow] = listOf(event(tomorrow, "야간"), event(tomorrow, "주간"), event(tomorrow, "야간"))
 
-        assertTrue(useCase.execute(date, zone).isEmpty())
+        assertTrue(useCase.execute(today, tomorrow, zone).isEmpty())
         assertEquals("CONFLICT:1,2", previews.get(group.id)?.stateKey)
     }
 
     @Test
-    fun `calendar holiday does not hide a conflict when another shift opts out`() = runTest {
-        val nightWithoutHolidaySkip = night.copy(skipOnPublicHoliday = false)
-        val useCase = useCase(day, nightWithoutHolidaySkip)
-        previews.save(group.id, "CONFLICT:1,2")
-        calendar.eventsByDate[date] = listOf(
-            event("대한민국 임시공휴일"),
-            event("주간"),
-            event("야간"),
-        )
+    fun `vacation cannot hide a day and night conflict`() = runTest {
+        calendar.eventsByDate[today] = listOf(event(today, "여름휴가"), event(today, "주간"), event(today, "야간"))
+        calendar.eventsByDate[tomorrow] = listOf(event(tomorrow, "야간"), event(tomorrow, "여름휴가"), event(tomorrow, "주간"))
 
-        assertTrue(useCase.execute(date, zone).isEmpty())
+        assertTrue(useCase.execute(today, tomorrow, zone).isEmpty())
+        assertEquals("CONFLICT:1,2", previews.get(group.id)?.stateKey)
+    }
+
+    @Test
+    fun `calendar holiday cannot hide a day and night conflict`() = runTest {
+        calendar.eventsByDate[today] = listOf(event(today, "대한민국 임시공휴일"), event(today, "주간"), event(today, "야간"))
+        calendar.eventsByDate[tomorrow] = listOf(event(tomorrow, "야간"), event(tomorrow, "대한민국 임시공휴일"), event(tomorrow, "주간"))
+
+        assertTrue(useCase.execute(today, tomorrow, zone).isEmpty())
+        assertEquals("CONFLICT:1,2", previews.get(group.id)?.stateKey)
+    }
+
+    @Test
+    fun `local holiday cannot hide a day and night conflict`() = runTest {
+        val holiday = LocalDate.of(2026, 8, 15)
+        val nextDay = holiday.plusDays(1)
+        calendar.eventsByDate[holiday] = listOf(event(holiday, "주간"), event(holiday, "야간"))
+        calendar.eventsByDate[nextDay] = listOf(event(nextDay, "야간"), event(nextDay, "주간"))
+
+        assertTrue(useCase.execute(holiday, nextDay, zone).isEmpty())
         assertEquals("CONFLICT:1,2", previews.get(group.id)?.stateKey)
     }
 
     @Test
     fun `none and read failure are separate states`() = runTest {
-        previews.save(group.id, "NONE")
-        calendar.failOn(date)
+        calendar.failOn(tomorrow)
 
-        val change = useCase.execute(date, zone).single()
+        val change = useCase.execute(today, tomorrow, zone).single()
 
         assertEquals("NONE", change.previousKey)
         assertEquals("READ_FAILURE", change.currentKey)
@@ -119,15 +144,15 @@ class EvaluateNextDayShiftGroupsUseCaseTest {
 
     @Test
     fun `vacation suppresses a matched shift in tomorrow preview`() = runTest {
-        previews.save(group.id, "MATCHED:2")
-        calendar.eventsByDate[date] = listOf(event("여름휴가"), event("야간"))
+        calendar.eventsByDate[today] = listOf(event(today, "야간"))
+        calendar.eventsByDate[tomorrow] = listOf(event(tomorrow, "여름휴가"), event(tomorrow, "야간"))
 
-        val change = useCase.execute(date, zone).single()
+        val change = useCase.execute(today, tomorrow, zone).single()
 
         assertEquals("NONE", change.currentKey)
     }
 
-    private fun event(title: String) = CalendarEvent(
+    private fun event(date: LocalDate, title: String) = CalendarEvent(
         title = title,
         start = date.atStartOfDay(zone).toInstant(),
         end = date.plusDays(1).atStartOfDay(zone).toInstant(),

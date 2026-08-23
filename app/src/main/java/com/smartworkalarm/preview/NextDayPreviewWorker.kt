@@ -20,10 +20,11 @@ class NextDayPreviewWorker @AssistedInject constructor(
     private val zoneId: ZoneId,
 ) : CoroutineWorker(context, parameters) {
     override suspend fun doWork(): Result = runCatching {
-        val tomorrow = clock.instant().atZone(zoneId).toLocalDate().plusDays(1)
+        val today = clock.instant().atZone(zoneId).toLocalDate()
+        val tomorrow = today.plusDays(1)
         notifications.post(
             alarmChanges = evaluate.execute(tomorrow, zoneId),
-            shiftChanges = evaluateShiftGroups.execute(tomorrow, zoneId),
+            shiftChanges = evaluateShiftGroups.execute(today, tomorrow, zoneId),
         )
     }.fold({ Result.success() }, { Result.retry() })
 }

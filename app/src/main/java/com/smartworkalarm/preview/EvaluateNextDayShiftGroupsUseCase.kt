@@ -21,7 +21,7 @@ import kotlinx.coroutines.flow.first
 
 data class ShiftPreviewChange(
     val group: ShiftAlarmGroup,
-    val previousKey: String?,
+    val previousKey: String,
     val currentEvaluation: ShiftDayEvaluation,
 ) {
     val currentKey: String get() = ShiftPreviewStateKey.of(currentEvaluation)
@@ -44,25 +44,32 @@ class EvaluateNextDayShiftGroupsUseCase @Inject constructor(
     private val clock: Clock,
     private val holidays: KoreanPublicHolidayProvider = KoreanPublicHolidayProvider(),
 ) {
-    suspend fun execute(targetDate: LocalDate, zoneId: ZoneId): List<ShiftPreviewChange> {
+    suspend fun execute(
+        today: LocalDate,
+        tomorrow: LocalDate,
+        zoneId: ZoneId,
+    ): List<ShiftPreviewChange> {
         val groups = repository.observeGroupsWithTypes().first()
             .filter { it.group.enabled }
         if (groups.isEmpty()) return emptyList()
 
-        val eventsResult = events.getEventsOverlapping(
-            targetDate.atStartOfDay(zoneId).toInstant(),
-            targetDate.plusDays(1).atStartOfDay(zoneId).toInstant(),
-        )
+        val todayEvents = eventsFor(today, zoneId)
+        val tomorrowEvents = eventsFor(tomorrow, zoneId)
         return buildList {
             groups.forEach { groupWithTypes ->
+                val previous = evaluateEffectiveState(
+                    types = groupWithTypes.shiftTypes,
+                    targetDate = today,
+                    eventsResult = todayEvents,
+                )
                 val current = evaluateEffectiveState(
                     types = groupWithTypes.shiftTypes,
-                    targetDate = targetDate,
-                    eventsResult = eventsResult,
+                    targetDate = tomorrow,
+                    eventsResult = tomorrowEvents,
                 )
+                val previousKey = ShiftPreviewStateKey.of(previous)
                 val currentKey = ShiftPreviewStateKey.of(current)
-                val previousKey = previews.get(groupWithTypes.group.id)?.stateKey
-                if (previousKey != null && previousKey != currentKey) {
+                if (previousKey != currentKey) {
                     add(ShiftPreviewChange(groupWithTypes.group, previousKey, current))
                 }
                 previews.upsert(
@@ -72,6 +79,12 @@ class EvaluateNextDayShiftGroupsUseCase @Inject constructor(
         }
     }
 
+    private suspend fun eventsFor(date: LocalDate, zoneId: ZoneId): Result<List<CalendarEvent>> =
+        events.getEventsOverlapping(
+            date.atStartOfDay(zoneId).toInstant(),
+            date.plusDays(1).atStartOfDay(zoneId).toInstant(),
+        )
+
     private fun evaluateEffectiveState(
         types: List<ShiftTypeAlarm>,
         targetDate: LocalDate,
@@ -80,29 +93,14 @@ class EvaluateNextDayShiftGroupsUseCase @Inject constructor(
         val scheduledTypes = types.filter { it.enabled && it.repeatsOn(targetDate.dayOfWeek) }
         if (scheduledTypes.isEmpty()) return ShiftDayEvaluation.None
 
-        val localHoliday = holidays.find(targetDate) != null
-        if (localHoliday && scheduledTypes.all(ShiftTypeAlarm::skipOnPublicHoliday)) return ShiftDayEvaluation.None
-
-        return eventsResult.fold(
-            onSuccess = { dayEvents ->
-                if (dayEvents.any { CalendarKeywordMatcher.matches(it.title, listOf("휴가")) }) {
-                    ShiftDayEvaluation.None
-                } else {
-                    val publicHoliday = localHoliday || dayEvents.any { CalendarHolidayMatcher.matches(it.title) }
-                    val evaluation = evaluator.evaluate(scheduledTypes, Result.success(dayEvents))
-                    if (
-                        publicHoliday &&
-                        evaluation is ShiftDayEvaluation.Matched &&
-                        scheduledTypes.first { it.id == evaluation.shiftTypeId }.skipOnPublicHoliday
-                    ) {
-                        ShiftDayEvaluation.None
-                    } else {
-                        evaluation
-                    }
-                }
-            },
-            onFailure = { ShiftDayEvaluation.ReadFailure },
-        )
+        val evaluation = evaluator.evaluate(scheduledTypes, eventsResult)
+        if (evaluation !is ShiftDayEvaluation.Matched) return evaluation
+        val dayEvents = eventsResult.getOrNull() ?: return evaluation
+        val skippedForVacation = dayEvents.any { CalendarKeywordMatcher.matches(it.title, listOf("휴가")) }
+        val skippedForPublicHoliday =
+            (holidays.find(targetDate) != null || dayEvents.any { CalendarHolidayMatcher.matches(it.title) }) &&
+                scheduledTypes.first { it.id == evaluation.shiftTypeId }.skipOnPublicHoliday
+        return if (skippedForVacation || skippedForPublicHoliday) ShiftDayEvaluation.None else evaluation
     }
 }
 
