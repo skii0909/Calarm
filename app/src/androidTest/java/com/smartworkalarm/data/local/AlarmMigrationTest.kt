@@ -7,6 +7,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.smartworkalarm.di.MIGRATION_1_2
 import com.smartworkalarm.di.MIGRATION_2_3
 import com.smartworkalarm.di.MIGRATION_3_4
+import com.smartworkalarm.di.MIGRATION_4_5
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Rule
@@ -72,6 +73,29 @@ class AlarmMigrationTest {
             assertEquals("0", defaults["skip_on_public_holiday"])
             assertEquals("0", defaults["gradual_volume"])
             assertEquals("5", defaults["snooze_minutes"])
+        }
+        db.close()
+    }
+
+    @Test
+    fun migrationFrom4To5AddsShiftAlarmTablesWithOptionalEmergencyType() {
+        helper.createDatabase("migration-4-5", 4).close()
+
+        val db = helper.runMigrationsAndValidate("migration-4-5", 5, true, MIGRATION_4_5)
+
+        listOf("shift_alarm_groups", "shift_type_alarms", "shift_preview_states").forEach { tableName ->
+            db.query("SELECT name FROM sqlite_master WHERE type = 'table' AND name = '$tableName'").use { cursor ->
+                assertEquals("Expected $tableName to exist", true, cursor.moveToFirst())
+            }
+        }
+        db.query("PRAGMA table_info(shift_alarm_groups)").use { cursor ->
+            var emergencyColumnIsNullable: Boolean? = null
+            while (cursor.moveToNext()) {
+                if (cursor.getString(cursor.getColumnIndexOrThrow("name")) == "emergency_shift_type_id") {
+                    emergencyColumnIsNullable = cursor.getInt(cursor.getColumnIndexOrThrow("notnull")) == 0
+                }
+            }
+            assertEquals(true, emergencyColumnIsNullable)
         }
         db.close()
     }
