@@ -12,7 +12,10 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
@@ -36,6 +39,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import com.smartworkalarm.domain.model.RepeatDay
+import com.smartworkalarm.sound.RecommendedSoundCatalog
 
 @Composable
 fun AlarmEditScreen(viewModel: AlarmEditViewModel, alarmId: Long, onDone: () -> Unit) {
@@ -43,7 +47,7 @@ fun AlarmEditScreen(viewModel: AlarmEditViewModel, alarmId: Long, onDone: () -> 
     LaunchedEffect(alarmId) { viewModel.load(alarmId) }
     LaunchedEffect(state.saved) { if (state.saved) onDone() }
     Column(
-        modifier = Modifier.fillMaxSize().padding(20.dp),
+        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         Text(if (alarmId == 0L) "알람 추가" else "알람 수정", style = MaterialTheme.typography.headlineMedium)
@@ -78,6 +82,28 @@ fun AlarmEditScreen(viewModel: AlarmEditViewModel, alarmId: Long, onDone: () -> 
             supportingText = { Text("여러 키워드는 쉼표(,)로 구분하세요. 일정 제목에 키워드가 하나라도 포함되면 이 알람을 건너뜁니다.") },
             modifier = Modifier.fillMaxWidth(),
         )
+        SettingSwitch("공휴일 자동 끄기", state.skipOnPublicHoliday, viewModel::onSkipOnPublicHolidayChanged)
+        Text("대한민국 법정공휴일(2026~2031)에는 이 알람만 건너뜁니다.", style = MaterialTheme.typography.bodySmall)
+        SettingSwitch("벨소리 점점 크게", state.gradualVolume, viewModel::onGradualVolumeChanged)
+        Text("알람 소리가 1분 동안 서서히 커집니다.", style = MaterialTheme.typography.bodySmall)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Text("다시 울림 ${state.snoozeMinutes}분")
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                OutlinedButton(
+                    onClick = { viewModel.onSnoozeMinutesChanged(state.snoozeMinutes - 1) },
+                    enabled = state.snoozeMinutes > 5,
+                ) { Text("−") }
+                Text("${state.snoozeMinutes}분", modifier = Modifier.padding(horizontal = 12.dp))
+                OutlinedButton(
+                    onClick = { viewModel.onSnoozeMinutesChanged(state.snoozeMinutes + 1) },
+                    enabled = state.snoozeMinutes < 30,
+                ) { Text("+") }
+            }
+        }
         AlarmRingtonePickerField(state.ringtoneUri, viewModel::onRingtoneChanged)
         Button(onClick = viewModel::save, modifier = Modifier.fillMaxWidth()) { Text("저장") }
         if (alarmId != 0L) OutlinedButton(onClick = { viewModel.delete() }, modifier = Modifier.fillMaxWidth()) { Text("삭제") }
@@ -99,8 +125,12 @@ private fun AlarmRingtonePickerField(ringtoneUri: String?, onSelected: (String?)
             onSelected(picked?.toString())
         }
     }
+    var showRecommended by remember { mutableStateOf(false) }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text("알람음")
+        OutlinedButton(onClick = { showRecommended = true }, modifier = Modifier.fillMaxWidth()) {
+            Text("추천 벨소리 선택")
+        }
         OutlinedButton(
             onClick = {
                 launcher.launch(Intent(RingtoneManager.ACTION_RINGTONE_PICKER).apply {
@@ -112,6 +142,27 @@ private fun AlarmRingtonePickerField(ringtoneUri: String?, onSelected: (String?)
             },
             modifier = Modifier.fillMaxWidth(),
         ) { Text(title) }
+    }
+    if (showRecommended) {
+        AlertDialog(
+            onDismissRequest = { showRecommended = false },
+            title = { Text("추천 벨소리") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text("앱에서 직접 만든 저작권 안전 사운드입니다.", style = MaterialTheme.typography.bodySmall)
+                    RecommendedSoundCatalog.all.forEach { sound ->
+                        TextButton(
+                            onClick = {
+                                onSelected(sound.uri)
+                                showRecommended = false
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) { Text("${sound.title} · ${sound.description}") }
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { showRecommended = false }) { Text("닫기") } },
+        )
     }
 }
 
