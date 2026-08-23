@@ -21,14 +21,21 @@ class ShouldRingAlarmUseCase @Inject constructor(
         if (alarm.skipOnPublicHoliday && holidayProvider.find(date) != null) {
             return AlarmExecutionDecision.SKIP_FOR_VACATION
         }
-        if (!alarm.skipOnCalendarMatch) return AlarmExecutionDecision.RING
-        if (alarm.calendarKeywords.isEmpty()) return AlarmExecutionDecision.RING
+        val needsKeywordCheck = alarm.skipOnCalendarMatch && alarm.calendarKeywords.isNotEmpty()
+        val needsHolidayCheck = alarm.skipOnPublicHoliday
+        if (!needsKeywordCheck && !needsHolidayCheck) return AlarmExecutionDecision.RING
 
         val start = date.atStartOfDay(zoneId).toInstant()
         val end = date.plusDays(1).atStartOfDay(zoneId).toInstant()
         return calendarEventSource.getEventsOverlapping(start, end).fold(
             onSuccess = { events ->
-                if (events.any { CalendarKeywordMatcher.matches(it.title, alarm.calendarKeywords) }) {
+                val hasKeywordMatch = needsKeywordCheck && events.any {
+                    CalendarKeywordMatcher.matches(it.title, alarm.calendarKeywords)
+                }
+                val hasCalendarHoliday = needsHolidayCheck && events.any {
+                    CalendarHolidayMatcher.matches(it.title)
+                }
+                if (hasKeywordMatch || hasCalendarHoliday) {
                     AlarmExecutionDecision.SKIP_FOR_VACATION
                 } else {
                     AlarmExecutionDecision.RING
