@@ -3,12 +3,14 @@ package com.smartworkalarm.domain.usecase
 import com.smartworkalarm.domain.model.Alarm
 import com.smartworkalarm.domain.model.AlarmExecutionDecision
 import com.smartworkalarm.domain.repository.CalendarEventSource
+import com.smartworkalarm.domain.holiday.KoreanPublicHolidayProvider
 import java.time.LocalDate
 import java.time.ZoneId
 import javax.inject.Inject
 
 class ShouldRingAlarmUseCase @Inject constructor(
     private val calendarEventSource: CalendarEventSource,
+    private val holidayProvider: KoreanPublicHolidayProvider = KoreanPublicHolidayProvider(),
 ) {
     suspend fun execute(
         alarm: Alarm,
@@ -16,6 +18,9 @@ class ShouldRingAlarmUseCase @Inject constructor(
         zoneId: ZoneId,
     ): AlarmExecutionDecision {
         if (!alarm.enabled) return AlarmExecutionDecision.DO_NOT_RING
+        if (alarm.skipOnPublicHoliday && holidayProvider.find(date) != null) {
+            return AlarmExecutionDecision.SKIP_FOR_VACATION
+        }
         if (!alarm.skipOnCalendarMatch) return AlarmExecutionDecision.RING
         if (alarm.calendarKeywords.isEmpty()) return AlarmExecutionDecision.RING
 

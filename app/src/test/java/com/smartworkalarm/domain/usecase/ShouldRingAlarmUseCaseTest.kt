@@ -79,6 +79,20 @@ class ShouldRingAlarmUseCaseTest {
         assertEquals(AlarmExecutionDecision.RING, decision)
     }
 
+    @Test
+    fun `public holiday skips only opted in alarm without calendar`() = runTest {
+        val source = FakeEventSource(Result.failure(IllegalStateException()))
+        val holiday = LocalDate.of(2026, 8, 15)
+
+        val optedIn = ShouldRingAlarmUseCase(source)
+            .execute(alarm().copy(skipOnPublicHoliday = true), holiday, zone)
+        val optedOut = ShouldRingAlarmUseCase(source)
+            .execute(alarm().copy(skipOnCalendarMatch = false, skipOnPublicHoliday = false), holiday, zone)
+
+        assertEquals(AlarmExecutionDecision.SKIP_FOR_VACATION, optedIn)
+        assertEquals(AlarmExecutionDecision.RING, optedOut)
+    }
+
     private fun alarm() = Alarm(1, "출근", 7, 0, 31, true, true)
 
     private class FakeEventSource(
