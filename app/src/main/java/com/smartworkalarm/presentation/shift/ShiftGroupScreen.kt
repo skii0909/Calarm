@@ -90,13 +90,7 @@ fun ShiftGroupScreen(
             Text(todayStatus(state.todayStatus), style = MaterialTheme.typography.headlineMedium, color = Color.White)
             Text(todayStatusDetail(state.todayStatus), color = Color.White.copy(alpha = .82f))
         }
-        if (state.todayStatus is ShiftGroupDayStatus.ReadFailure) {
-            CalendarWarning("캘린더를 읽을 수 없어 비상 기본 알람이 적용됩니다.")
-        } else if (state.todayStatus == ShiftGroupDayStatus.None) {
-            CalendarWarning("오늘 캘린더에서 등록된 근무 형태를 찾지 못했습니다.")
-        } else if (state.todayStatus is ShiftGroupDayStatus.Conflict) {
-            CalendarWarning("여러 근무 형태가 함께 등록되어 있어 교대 알람이 울리지 않습니다.")
-        }
+        todayCalendarWarning(state.todayStatus)?.let { CalendarWarning(it) }
         NightPulseSection("그룹 설정", "이 그룹 안에서는 캘린더에 맞는 근무 알람 하나만 적용됩니다") {
             OutlinedTextField(
                 value = state.name,
@@ -201,6 +195,22 @@ fun todayStatus(status: ShiftGroupDayStatus?): String = when (status) {
     is ShiftGroupDayStatus.Conflict -> "근무 형태 중복"
     is ShiftGroupDayStatus.ReadFailure -> "캘린더 조회 실패"
     null -> "확인 중"
+}
+
+fun todayCalendarWarning(status: ShiftGroupDayStatus?): String? = when (status) {
+    is ShiftGroupDayStatus.ReadFailure -> if (status.emergencyType == null) {
+        "오늘 사용할 수 있는 비상 기본 알람이 없어 울리지 않습니다. 그룹 설정과 캘린더를 확인해 주세요."
+    } else {
+        "캘린더를 읽을 수 없어 비상 기본 알람이 적용됩니다."
+    }
+    ShiftGroupDayStatus.None -> "오늘 캘린더에서 등록된 근무 형태를 찾지 못했습니다."
+    is ShiftGroupDayStatus.Conflict -> "여러 근무 형태가 함께 등록되어 있어 교대 알람이 울리지 않습니다."
+    ShiftGroupDayStatus.Inactive,
+    ShiftGroupDayStatus.Vacation,
+    ShiftGroupDayStatus.PublicHoliday,
+    is ShiftGroupDayStatus.Matched,
+    null,
+    -> null
 }
 
 private fun todayStatusDetail(status: ShiftGroupDayStatus?): String = when (status) {
