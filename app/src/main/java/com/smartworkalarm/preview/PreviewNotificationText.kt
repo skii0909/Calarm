@@ -7,6 +7,7 @@ data class AlarmPreviewChange(
     val alarm: Alarm,
     val type: PreviewChangeType,
     val keyword: String? = null,
+    val holidayName: String? = null,
 )
 
 data class PreviewNotificationContent(val title: String, val content: String, val detail: String)
@@ -29,9 +30,16 @@ object PreviewNotificationText {
     private fun row(change: AlarmPreviewChange): String {
         val time = koreanTime(change.alarm.hour, change.alarm.minute)
         return when (change.type) {
-            PreviewChangeType.SKIPPED -> "‘${change.keyword.orEmpty()}’ 일정으로 $time ‘${change.alarm.name}’이 울리지 않습니다."
+            PreviewChangeType.SKIPPED -> "${reason(change)} $time ‘${change.alarm.name}’이 울리지 않습니다."
             PreviewChangeType.RESUMED -> "일정이 종료되어 $time ‘${change.alarm.name}’이 다시 울립니다."
         }
+    }
+
+    private fun reason(change: AlarmPreviewChange): String = when {
+        change.holidayName != null && change.keyword != null ->
+            "${change.holidayName} 및 ‘${change.keyword}’ 일정으로 인해"
+        change.holidayName != null -> "${change.holidayName}로 인해"
+        else -> "‘${change.keyword.orEmpty()}’ 일정으로"
     }
 
     private fun koreanTime(hour: Int, minute: Int): String {

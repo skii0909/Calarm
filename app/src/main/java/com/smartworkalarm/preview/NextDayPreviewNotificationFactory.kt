@@ -5,6 +5,8 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.media.AudioAttributes
+import android.provider.Settings
 import androidx.core.app.NotificationCompat
 import com.smartworkalarm.MainActivity
 import com.smartworkalarm.R
@@ -18,7 +20,13 @@ class NextDayPreviewNotificationFactory @Inject constructor(
     fun post(changes: List<AlarmPreviewChange>) {
         if (changes.isEmpty()) return
         manager.createNotificationChannel(
-            NotificationChannel(CHANNEL_ID, "다음 날 알람 변경", NotificationManager.IMPORTANCE_DEFAULT),
+            NotificationChannel(CHANNEL_ID, "다음 날 알람 변경", NotificationManager.IMPORTANCE_DEFAULT).apply {
+                enableVibration(true)
+                setSound(
+                    Settings.System.DEFAULT_NOTIFICATION_URI,
+                    AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_NOTIFICATION).build(),
+                )
+            },
         )
         val text = PreviewNotificationText.format(changes)
         val openApp = PendingIntent.getActivity(
