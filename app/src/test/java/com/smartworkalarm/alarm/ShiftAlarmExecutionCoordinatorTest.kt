@@ -1,11 +1,15 @@
 package com.smartworkalarm.alarm
 
+import com.smartworkalarm.domain.holiday.KoreanPublicHolidayProvider
+import com.smartworkalarm.domain.model.CalendarEvent
 import com.smartworkalarm.domain.model.ShiftAlarmGroup
 import com.smartworkalarm.domain.model.ShiftTypeAlarm
+import com.smartworkalarm.domain.repository.CalendarEventSource
 import com.smartworkalarm.domain.repository.ShiftAlarmRepository
 import com.smartworkalarm.domain.repository.ShiftAlarmScheduler
 import com.smartworkalarm.domain.repository.ScheduleResult
 import com.smartworkalarm.domain.shift.ShiftDayEvaluation
+import com.smartworkalarm.domain.shift.ShiftDayEvaluator
 import com.smartworkalarm.domain.usecase.CalculateNextOccurrenceUseCase
 import java.time.Instant
 import java.time.ZoneId
@@ -80,6 +84,41 @@ class ShiftAlarmExecutionCoordinatorTest {
         assertEquals(listOf("schedule", "evaluate"), events)
     }
 
+    @Test
+    fun `production calendar policy skips a vacation event before a matched shift`() = runTest {
+        val coordinator = productionCoordinator(Result.success(listOf(event("여름휴가"))))
+
+        assertEquals(ExecutionOutcome.SkippedForVacation, coordinator.execute(night.id, false, now))
+    }
+
+    @Test
+    fun `production calendar policy skips an opted in calendar holiday before a matched shift`() = runTest {
+        val coordinator = productionCoordinator(Result.success(listOf(event("대한민국 임시공휴일"))))
+
+        assertEquals(ExecutionOutcome.SkippedForVacation, coordinator.execute(night.id, false, now))
+    }
+
+    @Test
+    fun `production calendar query happens after the next shift occurrence is scheduled`() = runTest {
+        val events = mutableListOf<String>()
+        val coordinator = productionCoordinator(
+            Result.success(listOf(event("야간"))),
+            onSchedule = { events += "schedule" },
+            onQuery = { events += "query" },
+        )
+
+        assertEquals(ExecutionOutcome.Ringing, coordinator.execute(night.id, false, now))
+        assertEquals(listOf("schedule", "query"), events)
+    }
+
+    @Test
+    fun `production calendar read failure rings only the emergency shift type`() = runTest {
+        val coordinator = productionCoordinator(Result.failure(IllegalStateException("no readable calendar")))
+
+        assertEquals(ExecutionOutcome.RingingWithCalendarWarning, coordinator.execute(day.id, false, now))
+        assertEquals(ExecutionOutcome.SkippedForShift, coordinator.execute(night.id, false, now))
+    }
+
     private fun coordinator(
         result: ShiftDayEvaluation,
         emergencyId: Long? = null,
@@ -100,6 +139,35 @@ class ShiftAlarmExecutionCoordinatorTest {
             override fun start(alarmId: Long, alarmName: String, ringtoneUri: String?, gradualVolume: Boolean, snoozeMinutes: Int) = Unit
         },
         zoneId = zone,
+    )
+
+    private fun productionCoordinator(
+        eventsResult: Result<List<CalendarEvent>>,
+        onSchedule: () -> Unit = {},
+        onQuery: () -> Unit = {},
+    ) = ShiftAlarmExecutionCoordinator(
+        repository = Repository(ShiftAlarmGroup(10, "교대", true, emergencyShiftTypeId = day.id), listOf(day, night)),
+        scheduler = Scheduler(onSchedule),
+        calculator = CalculateNextOccurrenceUseCase(),
+        events = object : CalendarEventSource {
+            override suspend fun getEventsOverlapping(startInclusive: Instant, endExclusive: Instant): Result<List<CalendarEvent>> {
+                onQuery()
+                return eventsResult
+            }
+        },
+        evaluator = ShiftDayEvaluator(),
+        holidays = KoreanPublicHolidayProvider(),
+        ringer = object : AlarmRinger {
+            override fun start(alarmId: Long, alarmName: String, ringtoneUri: String?, gradualVolume: Boolean, snoozeMinutes: Int) = Unit
+        },
+        zoneId = zone,
+    )
+
+    private fun event(title: String) = CalendarEvent(
+        title = title,
+        start = now,
+        end = now.plusSeconds(60),
+        allDay = false,
     )
 
     private fun shiftType(id: Long, name: String) = ShiftTypeAlarm(

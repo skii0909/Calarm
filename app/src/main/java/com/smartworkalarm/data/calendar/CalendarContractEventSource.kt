@@ -10,17 +10,54 @@ import javax.inject.Inject
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-class CalendarContractEventSource @Inject constructor(
-    private val contentResolver: ContentResolver,
+class CalendarContractEventSource internal constructor(
+    private val calendarIds: () -> List<Long>,
+    private val eventQuery: (List<Long>, Instant, Instant) -> List<CalendarEvent>,
 ) : CalendarEventSource {
+    @Inject
+    constructor(contentResolver: ContentResolver) : this(
+        calendarIds = { queryGoogleCalendarIds(contentResolver) },
+        eventQuery = { ids, start, end -> queryEvents(contentResolver, ids, start, end) },
+    )
+
     override suspend fun getEventsOverlapping(
         startInclusive: Instant,
         endExclusive: Instant,
     ): Result<List<CalendarEvent>> = withContext(Dispatchers.IO) {
         runCatching {
-            val calendarIds = queryGoogleCalendarIds()
-            if (calendarIds.isEmpty()) return@runCatching emptyList()
+            val ids = calendarIds()
+            check(ids.isNotEmpty()) { "No readable Google calendars" }
+            eventQuery(ids, startInclusive, endExclusive)
+        }
+    }
 
+    companion object {
+        private fun queryGoogleCalendarIds(contentResolver: ContentResolver): List<Long> {
+            val projection = arrayOf(CalendarContract.Calendars._ID)
+            val selection = "${CalendarContract.Calendars.ACCOUNT_TYPE} = ? AND " +
+                "${CalendarContract.Calendars.VISIBLE} = 1 AND ${CalendarContract.Calendars.SYNC_EVENTS} = 1"
+            val cursor = checkNotNull(
+                contentResolver.query(
+                    CalendarContract.Calendars.CONTENT_URI,
+                    projection,
+                    selection,
+                    arrayOf("com.google"),
+                    null,
+                ),
+            ) { "Calendar provider returned no cursor" }
+            return cursor.use {
+                buildList {
+                    while (it.moveToNext()) add(it.getLong(0))
+                }
+            }
+        }
+
+        private fun queryEvents(
+            contentResolver: ContentResolver,
+            calendarIds: List<Long>,
+            startInclusive: Instant,
+            endExclusive: Instant,
+        ): List<CalendarEvent> {
             val uriBuilder = CalendarContract.Instances.CONTENT_URI.buildUpon()
             ContentUris.appendId(uriBuilder, startInclusive.toEpochMilli())
             ContentUris.appendId(uriBuilder, endExclusive.toEpochMilli())
@@ -41,8 +78,7 @@ class CalendarContractEventSource @Inject constructor(
                     null,
                 ),
             ) { "Calendar provider returned no cursor" }
-
-            cursor.use {
+            return cursor.use {
                 buildList {
                     while (it.moveToNext()) {
                         add(
@@ -55,26 +91,6 @@ class CalendarContractEventSource @Inject constructor(
                         )
                     }
                 }
-            }
-        }
-    }
-
-    private fun queryGoogleCalendarIds(): List<Long> {
-        val projection = arrayOf(CalendarContract.Calendars._ID)
-        val selection = "${CalendarContract.Calendars.ACCOUNT_TYPE} = ? AND " +
-            "${CalendarContract.Calendars.VISIBLE} = 1 AND ${CalendarContract.Calendars.SYNC_EVENTS} = 1"
-        val cursor = checkNotNull(
-            contentResolver.query(
-                CalendarContract.Calendars.CONTENT_URI,
-                projection,
-                selection,
-                arrayOf("com.google"),
-                null,
-            ),
-        ) { "Calendar provider returned no cursor" }
-        return cursor.use {
-            buildList {
-                while (it.moveToNext()) add(it.getLong(0))
             }
         }
     }
