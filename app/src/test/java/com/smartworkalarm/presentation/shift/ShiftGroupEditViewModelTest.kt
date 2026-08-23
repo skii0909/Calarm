@@ -5,8 +5,14 @@ import com.smartworkalarm.domain.model.ShiftAlarmGroup
 import com.smartworkalarm.domain.model.ShiftTypeAlarm
 import com.smartworkalarm.domain.repository.CalendarEventSource
 import com.smartworkalarm.domain.repository.ShiftAlarmRepository
-import com.smartworkalarm.domain.shift.ShiftDayEvaluation
+import com.smartworkalarm.domain.repository.ShiftAlarmScheduler
+import com.smartworkalarm.domain.repository.ScheduleResult
 import com.smartworkalarm.domain.shift.ShiftDayEvaluator
+import com.smartworkalarm.domain.shift.ShiftGroupDayStatus
+import com.smartworkalarm.domain.shift.EvaluateShiftGroupDayUseCase
+import com.smartworkalarm.domain.holiday.KoreanPublicHolidayProvider
+import com.smartworkalarm.domain.usecase.CalculateNextOccurrenceUseCase
+import com.smartworkalarm.domain.usecase.ReconcileShiftAlarmsUseCase
 import java.time.Clock
 import java.time.Instant
 import java.time.ZoneId
@@ -116,6 +122,34 @@ class ShiftGroupEditViewModelTest {
     }
 
     @Test
+    fun `repeated draft taps create one group and navigate once`() = runTest(dispatcher) {
+        val repository = FakeShiftRepository(groupWithTypes())
+        val viewModel = viewModel(repository)
+        viewModel.onGroupNameChanged("병원 근무")
+        val createdIds = mutableListOf<Long>()
+
+        viewModel.createDraftAndAddShiftType(createdIds::add)
+        viewModel.createDraftAndAddShiftType(createdIds::add)
+        advanceUntilIdle()
+
+        assertEquals(1, repository.savedGroups.size)
+        assertEquals(listOf(11L), createdIds)
+    }
+
+    @Test
+    fun `shift type route rejects a type belonging to another group`() = runTest(dispatcher) {
+        val foreign = type(1, "주간", listOf("주간")).copy(groupId = 99)
+        val repository = FakeShiftRepository(groupWithTypes(types = listOf(foreign, type(2, "야간", listOf("야간")))))
+        val viewModel = viewModel(repository)
+
+        viewModel.loadShiftType(groupId = 10, shiftTypeId = foreign.id)
+        advanceUntilIdle()
+
+        assertEquals("이 그룹에 속하지 않은 근무 형태입니다", viewModel.shiftTypeState.value.loadError)
+        assertEquals(0L, viewModel.shiftTypeState.value.id)
+    }
+
+    @Test
     fun `shift type save trims aliases removes blanks and rejects another types alias`() = runTest(dispatcher) {
         val repository = FakeShiftRepository(groupWithTypes())
         val viewModel = viewModel(repository)
@@ -146,13 +180,20 @@ class ShiftGroupEditViewModelTest {
         viewModel.loadGroup(10)
         advanceUntilIdle()
 
-        assertEquals(ShiftDayEvaluation.Matched(2, "야간"), viewModel.state.value.todayEvaluation)
+        assertEquals(ShiftGroupDayStatus.Matched(type(2, "야간", listOf("야간"))), viewModel.state.value.todayStatus)
     }
 
     private fun viewModel(
         repository: FakeShiftRepository,
         source: CalendarEventSource = eventSource(Result.success(emptyList())),
-    ) = ShiftGroupEditViewModel(repository, source, ShiftDayEvaluator(), clock, zoneId)
+    ) = ShiftGroupEditViewModel(
+        repository,
+        ReconcileShiftAlarmsUseCase(repository, NoOpShiftScheduler, CalculateNextOccurrenceUseCase(), clock, zoneId),
+        source,
+        EvaluateShiftGroupDayUseCase(ShiftDayEvaluator(), KoreanPublicHolidayProvider()),
+        clock,
+        zoneId,
+    )
 
     private fun eventSource(result: Result<List<CalendarEvent>>) = object : CalendarEventSource {
         override suspend fun getEventsOverlapping(startInclusive: Instant, endExclusive: Instant) = result
@@ -202,5 +243,11 @@ class ShiftGroupEditViewModelTest {
         }
         override suspend fun deleteGroup(groupId: Long) = Unit
         override suspend fun deleteShiftType(shiftTypeId: Long) = Unit
+    }
+
+    private object NoOpShiftScheduler : ShiftAlarmScheduler {
+        override fun scheduleShift(shiftTypeId: Long, triggerAt: Instant) = ScheduleResult.Scheduled
+        override fun scheduleShiftSnooze(shiftTypeId: Long, triggerAt: Instant) = ScheduleResult.Scheduled
+        override fun cancelShift(shiftTypeId: Long) = Unit
     }
 }

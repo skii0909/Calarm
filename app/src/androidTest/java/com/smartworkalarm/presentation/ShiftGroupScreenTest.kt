@@ -5,7 +5,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import com.smartworkalarm.domain.model.ShiftTypeAlarm
-import com.smartworkalarm.domain.shift.ShiftDayEvaluation
+import com.smartworkalarm.domain.shift.ShiftGroupDayStatus
 import com.smartworkalarm.presentation.shift.ShiftGroupEditState
 import com.smartworkalarm.presentation.shift.ShiftGroupScreen
 import com.smartworkalarm.presentation.shift.ShiftTypeEditScreen
@@ -25,7 +25,7 @@ class ShiftGroupScreenTest {
                         id = 1,
                         name = "병원 근무",
                         shiftTypes = listOf(type()),
-                        todayEvaluation = ShiftDayEvaluation.Matched(1, "주간"),
+                        todayStatus = ShiftGroupDayStatus.Matched(type()),
                     ),
                 )
             }

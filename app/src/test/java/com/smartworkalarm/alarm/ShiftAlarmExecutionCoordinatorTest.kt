@@ -10,6 +10,7 @@ import com.smartworkalarm.domain.repository.ShiftAlarmScheduler
 import com.smartworkalarm.domain.repository.ScheduleResult
 import com.smartworkalarm.domain.shift.ShiftDayEvaluation
 import com.smartworkalarm.domain.shift.ShiftDayEvaluator
+import com.smartworkalarm.domain.shift.EvaluateShiftGroupDayUseCase
 import com.smartworkalarm.domain.usecase.CalculateNextOccurrenceUseCase
 import java.time.Instant
 import java.time.ZoneId
@@ -119,6 +120,16 @@ class ShiftAlarmExecutionCoordinatorTest {
         assertEquals(ExecutionOutcome.SkippedForShift, coordinator.execute(night.id, false, now))
     }
 
+    @Test
+    fun `disabled matching type does not conflict with effective type`() = runTest {
+        val coordinator = productionCoordinator(
+            Result.success(listOf(event("주간"), event("야간"))),
+            types = listOf(day.copy(enabled = false), night),
+        )
+
+        assertEquals(ExecutionOutcome.Ringing, coordinator.execute(night.id, false, now))
+    }
+
     private fun coordinator(
         result: ShiftDayEvaluation,
         emergencyId: Long? = null,
@@ -145,8 +156,9 @@ class ShiftAlarmExecutionCoordinatorTest {
         eventsResult: Result<List<CalendarEvent>>,
         onSchedule: () -> Unit = {},
         onQuery: () -> Unit = {},
+        types: List<ShiftTypeAlarm> = listOf(day, night),
     ) = ShiftAlarmExecutionCoordinator(
-        repository = Repository(ShiftAlarmGroup(10, "교대", true, emergencyShiftTypeId = day.id), listOf(day, night)),
+        repository = Repository(ShiftAlarmGroup(10, "교대", true, emergencyShiftTypeId = day.id), types),
         scheduler = Scheduler(onSchedule),
         calculator = CalculateNextOccurrenceUseCase(),
         events = object : CalendarEventSource {
@@ -155,8 +167,7 @@ class ShiftAlarmExecutionCoordinatorTest {
                 return eventsResult
             }
         },
-        evaluator = ShiftDayEvaluator(),
-        holidays = KoreanPublicHolidayProvider(),
+        effectiveEvaluator = EvaluateShiftGroupDayUseCase(ShiftDayEvaluator(), KoreanPublicHolidayProvider()),
         ringer = object : AlarmRinger {
             override fun start(alarmId: Long, alarmName: String, ringtoneUri: String?, gradualVolume: Boolean, snoozeMinutes: Int) = Unit
         },

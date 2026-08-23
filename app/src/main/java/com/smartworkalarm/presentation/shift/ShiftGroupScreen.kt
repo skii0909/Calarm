@@ -35,7 +35,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.smartworkalarm.domain.model.ShiftTypeAlarm
-import com.smartworkalarm.domain.shift.ShiftDayEvaluation
+import com.smartworkalarm.domain.shift.ShiftGroupDayStatus
 import com.smartworkalarm.presentation.alarmedit.readableTextFieldColors
 import com.smartworkalarm.presentation.components.FeaturePill
 import com.smartworkalarm.presentation.components.GradientHero
@@ -87,14 +87,14 @@ fun ShiftGroupScreen(
         Text("교대 알람 그룹", style = MaterialTheme.typography.headlineSmall)
         GradientHero {
             Text("오늘 근무", color = Color.White.copy(alpha = .75f))
-            Text(todayStatus(state.todayEvaluation), style = MaterialTheme.typography.headlineMedium, color = Color.White)
-            Text(todayStatusDetail(state.todayEvaluation), color = Color.White.copy(alpha = .82f))
+            Text(todayStatus(state.todayStatus), style = MaterialTheme.typography.headlineMedium, color = Color.White)
+            Text(todayStatusDetail(state.todayStatus), color = Color.White.copy(alpha = .82f))
         }
-        if (state.todayEvaluation == ShiftDayEvaluation.ReadFailure) {
+        if (state.todayStatus is ShiftGroupDayStatus.ReadFailure) {
             CalendarWarning("캘린더를 읽을 수 없어 비상 기본 알람이 적용됩니다.")
-        } else if (state.todayEvaluation == ShiftDayEvaluation.None) {
+        } else if (state.todayStatus == ShiftGroupDayStatus.None) {
             CalendarWarning("오늘 캘린더에서 등록된 근무 형태를 찾지 못했습니다.")
-        } else if (state.todayEvaluation is ShiftDayEvaluation.Conflict) {
+        } else if (state.todayStatus is ShiftGroupDayStatus.Conflict) {
             CalendarWarning("여러 근무 형태가 함께 등록되어 있어 교대 알람이 울리지 않습니다.")
         }
         NightPulseSection("그룹 설정", "이 그룹 안에서는 캘린더에 맞는 근무 알람 하나만 적용됩니다") {
@@ -192,18 +192,28 @@ private fun CalendarWarning(message: String) {
     }
 }
 
-fun todayStatus(evaluation: ShiftDayEvaluation?): String = when (evaluation) {
-    is ShiftDayEvaluation.Matched -> evaluation.name
-    ShiftDayEvaluation.None -> "근무 형태 없음"
-    is ShiftDayEvaluation.Conflict -> "근무 형태 중복"
-    ShiftDayEvaluation.ReadFailure -> "캘린더 조회 실패"
+fun todayStatus(status: ShiftGroupDayStatus?): String = when (status) {
+    ShiftGroupDayStatus.Inactive -> "오늘 비활성"
+    ShiftGroupDayStatus.Vacation -> "휴가"
+    ShiftGroupDayStatus.PublicHoliday -> "공휴일"
+    is ShiftGroupDayStatus.Matched -> status.shiftType.name
+    ShiftGroupDayStatus.None -> "근무 형태 없음"
+    is ShiftGroupDayStatus.Conflict -> "근무 형태 중복"
+    is ShiftGroupDayStatus.ReadFailure -> "캘린더 조회 실패"
     null -> "확인 중"
 }
 
-private fun todayStatusDetail(evaluation: ShiftDayEvaluation?): String = when (evaluation) {
-    is ShiftDayEvaluation.Matched -> "오늘은 ${evaluation.name} 알람이 적용됩니다."
-    ShiftDayEvaluation.None -> "오늘 교대 그룹 알람은 울리지 않습니다."
-    is ShiftDayEvaluation.Conflict -> evaluation.matches.joinToString(" · ") { it.name }
-    ShiftDayEvaluation.ReadFailure -> "지정한 비상 기본 알람을 사용합니다."
+private fun todayStatusDetail(status: ShiftGroupDayStatus?): String = when (status) {
+    ShiftGroupDayStatus.Inactive -> "오늘 활성화된 반복 근무 알람이 없습니다."
+    ShiftGroupDayStatus.Vacation -> "휴가 일정이 우선되어 오늘 교대 알람은 울리지 않습니다."
+    ShiftGroupDayStatus.PublicHoliday -> "공휴일 자동 끄기가 적용되었습니다."
+    is ShiftGroupDayStatus.Matched -> "오늘은 ${status.shiftType.name} 알람이 적용됩니다."
+    ShiftGroupDayStatus.None -> "오늘 교대 그룹 알람은 울리지 않습니다."
+    is ShiftGroupDayStatus.Conflict -> status.shiftTypes.joinToString(" · ") { it.name }
+    is ShiftGroupDayStatus.ReadFailure -> if (status.emergencyType == null) {
+        "오늘 사용할 수 있는 비상 기본 알람이 없습니다."
+    } else {
+        "지정한 비상 기본 알람을 사용합니다."
+    }
     null -> "캘린더 일정을 확인하고 있습니다."
 }

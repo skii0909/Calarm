@@ -82,6 +82,7 @@ fun ShiftTypeEditScreen(
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         Text(if (state.id == 0L) "근무 형태 추가" else "근무 형태 편집", style = MaterialTheme.typography.headlineSmall)
+        state.loadError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         GradientHero {
             Text("알람 시간", color = androidx.compose.ui.graphics.Color.White.copy(alpha = .75f))
             AlarmTimePickerField(state.hour, state.minute, onTimeChanged, hero = true)

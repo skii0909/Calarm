@@ -1,17 +1,14 @@
 package com.smartworkalarm.alarm
 
-import com.smartworkalarm.domain.holiday.KoreanPublicHolidayProvider
 import com.smartworkalarm.domain.model.Alarm
-import com.smartworkalarm.domain.model.CalendarEvent
 import com.smartworkalarm.domain.model.ShiftTypeAlarm
 import com.smartworkalarm.domain.repository.CalendarEventSource
 import com.smartworkalarm.domain.repository.ShiftAlarmRepository
 import com.smartworkalarm.domain.repository.ShiftAlarmScheduler
 import com.smartworkalarm.domain.shift.ShiftDayEvaluation
-import com.smartworkalarm.domain.shift.ShiftDayEvaluator
+import com.smartworkalarm.domain.shift.EvaluateShiftGroupDayUseCase
+import com.smartworkalarm.domain.shift.ShiftGroupDayStatus
 import com.smartworkalarm.domain.usecase.CalculateNextOccurrenceUseCase
-import com.smartworkalarm.domain.usecase.CalendarHolidayMatcher
-import com.smartworkalarm.domain.usecase.CalendarKeywordMatcher
 import java.time.Instant
 import java.time.DayOfWeek
 import java.time.LocalDate
@@ -36,33 +33,21 @@ class ShiftAlarmExecutionCoordinator internal constructor(
         scheduler: ShiftAlarmScheduler,
         calculator: CalculateNextOccurrenceUseCase,
         events: CalendarEventSource,
-        evaluator: ShiftDayEvaluator,
-        holidays: KoreanPublicHolidayProvider,
+        effectiveEvaluator: EvaluateShiftGroupDayUseCase,
         ringer: AlarmRinger,
         zoneId: ZoneId,
     ) : this(
         repository = repository,
         scheduler = scheduler,
         calculator = calculator,
-        decisionProvider = { group, type, date ->
-            when {
-                type.skipOnPublicHoliday && holidays.find(date) != null -> ShiftExecutionDecision.SkipForVacation
-                else -> events.getEventsOverlapping(
-                    date.atStartOfDay(zoneId).toInstant(),
-                    date.plusDays(1).atStartOfDay(zoneId).toInstant(),
-                ).fold(
-                    onSuccess = { dayEvents ->
-                        if (dayEvents.hasVacation() || (type.skipOnPublicHoliday && dayEvents.any { CalendarHolidayMatcher.matches(it.title) })) {
-                            ShiftExecutionDecision.SkipForVacation
-                        } else {
-                            ShiftExecutionDecision.Evaluated(evaluator.evaluate(group.shiftTypes, Result.success(dayEvents)))
-                        }
-                    },
-                    onFailure = {
-                        ShiftExecutionDecision.Evaluated(ShiftDayEvaluation.ReadFailure)
-                    },
-                )
-            }
+        decisionProvider = { group, _, date ->
+            val dayEvents = events.getEventsOverlapping(
+                date.atStartOfDay(zoneId).toInstant(),
+                date.plusDays(1).atStartOfDay(zoneId).toInstant(),
+            )
+            ShiftExecutionDecision.Effective(
+                effectiveEvaluator.execute(group, date, dayEvents),
+            )
         },
         ringer = ringer,
         zoneId = zoneId,
@@ -81,6 +66,7 @@ class ShiftAlarmExecutionCoordinator internal constructor(
 
         return when (val decision = decisionProvider(group, shiftType, now.atZone(zoneId).toLocalDate())) {
             ShiftExecutionDecision.SkipForVacation -> ExecutionOutcome.SkippedForVacation
+            is ShiftExecutionDecision.Effective -> outcomeFor(decision.value, shiftType)
             is ShiftExecutionDecision.Evaluated -> when (val evaluation = decision.value) {
                 is ShiftDayEvaluation.Matched -> {
                     if (evaluation.shiftTypeId != shiftType.id) ExecutionOutcome.SkippedForShift
@@ -94,6 +80,22 @@ class ShiftAlarmExecutionCoordinator internal constructor(
                 is ShiftDayEvaluation.Conflict,
                 -> ExecutionOutcome.SkippedForShift
             }
+        }
+    }
+
+    private fun outcomeFor(status: ShiftGroupDayStatus, shiftType: ShiftTypeAlarm): ExecutionOutcome = when (status) {
+        ShiftGroupDayStatus.Inactive -> ExecutionOutcome.Ignored
+        ShiftGroupDayStatus.Vacation,
+        ShiftGroupDayStatus.PublicHoliday,
+        -> ExecutionOutcome.SkippedForVacation
+        is ShiftGroupDayStatus.Matched -> {
+            if (status.shiftType.id != shiftType.id) ExecutionOutcome.SkippedForShift else ring(shiftType, warning = false)
+        }
+        ShiftGroupDayStatus.None,
+        is ShiftGroupDayStatus.Conflict,
+        -> ExecutionOutcome.SkippedForShift
+        is ShiftGroupDayStatus.ReadFailure -> {
+            if (status.emergencyType?.id != shiftType.id) ExecutionOutcome.SkippedForShift else ring(shiftType, warning = true)
         }
     }
 
@@ -113,6 +115,7 @@ class ShiftAlarmExecutionCoordinator internal constructor(
 sealed interface ShiftExecutionDecision {
     data object SkipForVacation : ShiftExecutionDecision
     data class Evaluated(val value: ShiftDayEvaluation) : ShiftExecutionDecision
+    data class Effective(val value: ShiftGroupDayStatus) : ShiftExecutionDecision
 }
 
 private fun ShiftTypeAlarm.toAlarm() = Alarm(
@@ -131,7 +134,3 @@ private fun ShiftTypeAlarm.toAlarm() = Alarm(
 
 private fun ShiftTypeAlarm.repeatsOn(dayOfWeek: DayOfWeek): Boolean =
     repeatDaysMask and (1 shl (dayOfWeek.value - 1)) != 0
-
-private fun List<CalendarEvent>.hasVacation(): Boolean = any { event ->
-    CalendarKeywordMatcher.matches(event.title, listOf("휴가"))
-}

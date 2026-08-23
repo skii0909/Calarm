@@ -7,8 +7,9 @@ import com.smartworkalarm.domain.model.ShiftAlarmGroup
 import com.smartworkalarm.domain.model.ShiftTypeAlarm
 import com.smartworkalarm.domain.repository.CalendarEventSource
 import com.smartworkalarm.domain.repository.ShiftAlarmRepository
-import com.smartworkalarm.domain.shift.ShiftDayEvaluation
-import com.smartworkalarm.domain.shift.ShiftDayEvaluator
+import com.smartworkalarm.domain.shift.EvaluateShiftGroupDayUseCase
+import com.smartworkalarm.domain.shift.ShiftGroupDayStatus
+import com.smartworkalarm.domain.usecase.ReconcileShiftAlarmsUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import java.time.Clock
 import java.time.ZoneId
@@ -26,7 +27,7 @@ data class ShiftGroupEditState(
     val enabled: Boolean = true,
     val emergencyShiftTypeId: Long? = null,
     val shiftTypes: List<ShiftTypeAlarm> = emptyList(),
-    val todayEvaluation: ShiftDayEvaluation? = null,
+    val todayStatus: ShiftGroupDayStatus? = null,
     val nameError: String? = null,
     val shiftTypesError: String? = null,
     val aliasesError: String? = null,
@@ -51,6 +52,7 @@ data class ShiftTypeEditState(
     val nameError: String? = null,
     val aliasesError: String? = null,
     val repeatDaysError: String? = null,
+    val loadError: String? = null,
     val saved: Boolean = false,
     val deleted: Boolean = false,
 )
@@ -58,8 +60,9 @@ data class ShiftTypeEditState(
 @HiltViewModel
 class ShiftGroupEditViewModel @Inject constructor(
     private val repository: ShiftAlarmRepository,
+    private val reconcileShiftAlarms: ReconcileShiftAlarmsUseCase,
     private val calendarEventSource: CalendarEventSource,
-    private val evaluator: ShiftDayEvaluator,
+    private val evaluator: EvaluateShiftGroupDayUseCase,
     private val clock: Clock,
     private val zoneId: ZoneId,
 ) : ViewModel() {
@@ -68,6 +71,7 @@ class ShiftGroupEditViewModel @Inject constructor(
 
     private val _shiftTypeState = MutableStateFlow(ShiftTypeEditState())
     val shiftTypeState: StateFlow<ShiftTypeEditState> = _shiftTypeState.asStateFlow()
+    private var draftCreationInProgress = false
 
     fun loadGroup(groupId: Long) {
         if (groupId == 0L) {
@@ -82,7 +86,7 @@ class ShiftGroupEditViewModel @Inject constructor(
                 enabled = aggregate.group.enabled,
                 emergencyShiftTypeId = aggregate.group.emergencyShiftTypeId,
                 shiftTypes = aggregate.shiftTypes,
-                todayEvaluation = evaluateToday(aggregate.shiftTypes),
+                todayStatus = evaluateToday(aggregate),
             )
         }
     }
@@ -103,13 +107,14 @@ class ShiftGroupEditViewModel @Inject constructor(
             current.emergencyShiftTypeId !in current.shiftTypes.map { it.id } ->
                 _state.update { it.copy(emergencyError = "비상 기본 알람을 선택하세요") }
             else -> viewModelScope.launch {
-                val savedId = repository.upsertGroup(current.toGroup(name = current.name.trim()))
+                val savedId = reconcileShiftAlarms.saveGroup(current.toGroup(name = current.name.trim()))
                 _state.update { it.copy(id = if (it.id == 0L) savedId else it.id, name = it.name.trim(), saved = true) }
             }
         }
     }
 
     fun createDraftAndAddShiftType(onReady: (Long) -> Unit) {
+        if (draftCreationInProgress) return
         val current = _state.value
         if (current.name.isBlank()) {
             _state.update { it.copy(nameError = "그룹 이름을 입력하세요") }
@@ -119,16 +124,21 @@ class ShiftGroupEditViewModel @Inject constructor(
             onReady(current.id)
             return
         }
+        draftCreationInProgress = true
         viewModelScope.launch {
-            val id = repository.upsertGroup(current.toGroup(name = current.name.trim()).copy(enabled = false))
-            _state.update { it.copy(id = id, name = it.name.trim()) }
-            onReady(id)
+            try {
+                val id = repository.upsertGroup(current.toGroup(name = current.name.trim()).copy(enabled = false))
+                _state.update { it.copy(id = id, name = it.name.trim()) }
+                onReady(id)
+            } finally {
+                draftCreationInProgress = false
+            }
         }
     }
 
     fun deleteGroup() = viewModelScope.launch {
         val id = _state.value.id
-        if (id != 0L) repository.deleteGroup(id)
+        if (id != 0L) reconcileShiftAlarms.deleteGroup(id)
         _state.update { it.copy(deleted = true) }
     }
 
@@ -142,8 +152,16 @@ class ShiftGroupEditViewModel @Inject constructor(
                 emergencyShiftTypeId = aggregate.group.emergencyShiftTypeId,
                 shiftTypes = aggregate.shiftTypes,
             )
-            val type = if (shiftTypeId == 0L) null else repository.getShiftType(shiftTypeId)
-            _shiftTypeState.value = type?.toEditState() ?: ShiftTypeEditState(groupId = groupId)
+            if (shiftTypeId == 0L) {
+                _shiftTypeState.value = ShiftTypeEditState(groupId = groupId)
+                return@launch
+            }
+            val type = repository.getShiftType(shiftTypeId)
+            _shiftTypeState.value = when {
+                type == null -> ShiftTypeEditState(groupId = groupId, loadError = "근무 형태를 찾을 수 없습니다")
+                type.groupId != groupId -> ShiftTypeEditState(groupId = groupId, loadError = "이 그룹에 속하지 않은 근무 형태입니다")
+                else -> type.toEditState()
+            }
         }
     }
 
@@ -163,6 +181,7 @@ class ShiftGroupEditViewModel @Inject constructor(
 
     fun saveShiftType() {
         val current = _shiftTypeState.value
+        if (current.loadError != null) return
         val aliases = normalizeAliases(current.exactTitles)
         val duplicate = duplicateAliasInOtherType(current.id, aliases)
         when {
@@ -173,7 +192,7 @@ class ShiftGroupEditViewModel @Inject constructor(
             }
             current.repeatDaysMask == 0 -> _shiftTypeState.update { it.copy(repeatDaysError = "반복 요일을 하나 이상 선택하세요") }
             else -> viewModelScope.launch {
-                val savedId = repository.upsertShiftType(current.toShiftType(aliases))
+                val savedId = reconcileShiftAlarms.saveShiftType(current.toShiftType(aliases))
                 _shiftTypeState.update { it.copy(id = if (it.id == 0L) savedId else it.id, saved = true) }
             }
         }
@@ -181,15 +200,15 @@ class ShiftGroupEditViewModel @Inject constructor(
 
     fun deleteShiftType() = viewModelScope.launch {
         val id = _shiftTypeState.value.id
-        if (id != 0L) repository.deleteShiftType(id)
+        if (id != 0L) reconcileShiftAlarms.deleteShiftType(_shiftTypeState.value.groupId, id)
         _shiftTypeState.update { it.copy(deleted = true) }
     }
 
-    private suspend fun evaluateToday(types: List<ShiftTypeAlarm>): ShiftDayEvaluation {
+    private suspend fun evaluateToday(aggregate: ShiftAlarmRepository.GroupWithTypes): ShiftGroupDayStatus {
         val date = clock.instant().atZone(zoneId).toLocalDate()
         val start = date.atStartOfDay(zoneId).toInstant()
         val end = date.plusDays(1).atStartOfDay(zoneId).toInstant()
-        return evaluator.evaluate(types, calendarEventSource.getEventsOverlapping(start, end))
+        return evaluator.execute(aggregate, date, calendarEventSource.getEventsOverlapping(start, end))
     }
 
     private fun duplicateAliasInOtherType(typeId: Long, aliases: List<String>): String? {

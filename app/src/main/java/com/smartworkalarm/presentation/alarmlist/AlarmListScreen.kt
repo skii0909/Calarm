@@ -42,6 +42,8 @@ import com.smartworkalarm.presentation.components.GradientHero
 import com.smartworkalarm.presentation.shift.ShiftGroupListItem
 import com.smartworkalarm.presentation.shift.ShiftGroupListViewModel
 import com.smartworkalarm.presentation.shift.todayStatus
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 
 @Composable
 fun AlarmListScreen(
@@ -148,12 +150,9 @@ fun AlarmListScreen(
 
 @Composable
 private fun ShiftGroupRow(item: ShiftGroupListItem, onClick: () -> Unit) {
-    val matched = item.todayEvaluation as? com.smartworkalarm.domain.shift.ShiftDayEvaluation.Matched
-    val next = item.shiftTypes.firstOrNull { it.id == matched?.shiftTypeId }
-        ?: item.shiftTypes.firstOrNull { it.id == item.group.emergencyShiftTypeId }
-    val warning = item.todayEvaluation is com.smartworkalarm.domain.shift.ShiftDayEvaluation.Conflict ||
-        item.todayEvaluation == com.smartworkalarm.domain.shift.ShiftDayEvaluation.None ||
-        item.todayEvaluation == com.smartworkalarm.domain.shift.ShiftDayEvaluation.ReadFailure
+    val warning = item.status is com.smartworkalarm.domain.shift.ShiftGroupDayStatus.Conflict ||
+        item.status == com.smartworkalarm.domain.shift.ShiftGroupDayStatus.None ||
+        item.status is com.smartworkalarm.domain.shift.ShiftGroupDayStatus.ReadFailure
     Card(
         modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
         shape = MaterialTheme.shapes.extraLarge,
@@ -167,9 +166,12 @@ private fun ShiftGroupRow(item: ShiftGroupListItem, onClick: () -> Unit) {
                 Text(item.group.name, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
                 Switch(checked = item.group.enabled, onCheckedChange = null)
             }
-            Text("오늘 근무 · ${todayStatus(item.todayEvaluation)}", color = MaterialTheme.colorScheme.secondary)
+            Text("오늘 근무 · ${todayStatus(item.status)}", color = MaterialTheme.colorScheme.secondary)
             Text(
-                next?.let { "다음 알람 · %02d:%02d ${it.name}".format(it.hour, it.minute) } ?: "다음 알람 · 없음",
+                item.nextAlarm?.let {
+                    val time = DateTimeFormatter.ofPattern("MM.dd HH:mm").format(it.triggerAt.atZone(ZoneId.systemDefault()))
+                    "다음 알람 · $time ${it.name}"
+                } ?: "다음 알람 · 없음",
                 style = MaterialTheme.typography.bodyMedium,
             )
             Text("근무 형태 ${item.shiftTypes.size}개 · ${if (warning) "캘린더 확인 필요" else "캘린더 연결됨"}", style = MaterialTheme.typography.bodySmall)
