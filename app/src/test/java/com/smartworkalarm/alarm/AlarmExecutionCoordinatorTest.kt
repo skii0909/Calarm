@@ -82,7 +82,13 @@ class AlarmExecutionCoordinatorTest {
         calculator = CalculateNextOccurrenceUseCase(),
         decisionProvider = { _, _, _ -> decision },
         ringer = object : AlarmRinger {
-            override fun start(alarmId: Long, alarmName: String, ringtoneUri: String?) = onRing(ringtoneUri)
+            override fun start(
+                alarmId: Long,
+                alarmName: String,
+                ringtoneUri: String?,
+                gradualVolume: Boolean,
+                snoozeMinutes: Int,
+            ) = onRing(ringtoneUri)
         },
         zoneId = zone,
     )

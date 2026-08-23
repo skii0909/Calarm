@@ -7,6 +7,8 @@ import android.media.MediaPlayer
 import android.media.RingtoneManager
 import android.net.Uri
 import android.os.IBinder
+import android.os.Handler
+import android.os.Looper
 import android.os.VibrationEffect
 import android.os.Vibrator
 import androidx.core.content.getSystemService
@@ -23,6 +25,16 @@ class AlarmRingingService : Service() {
     @Inject lateinit var clock: Clock
     private var player: MediaPlayer? = null
     private var currentAlarmId: Long = -1
+    private var snoozeMinutes: Int = 5
+    private val volumeHandler = Handler(Looper.getMainLooper())
+    private var volumeStep = 0
+    private val volumeRamp = object : Runnable {
+        override fun run() {
+            val volume = GradualVolume.atSecond(volumeStep++)
+            player?.setVolume(volume, volume)
+            if (volumeStep <= 60 && player != null) volumeHandler.postDelayed(this, 1_000)
+        }
+    }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -31,7 +43,7 @@ class AlarmRingingService : Service() {
             ACTION_DISMISS -> stopRinging()
             ACTION_SNOOZE -> {
                 val id = intent.getLongExtra(AlarmSchedulerImpl.EXTRA_ALARM_ID, currentAlarmId)
-                if (id >= 0) scheduler.scheduleSnooze(id, clock.instant().plus(Duration.ofMinutes(5)))
+                if (id >= 0) scheduler.scheduleSnooze(id, clock.instant().plus(Duration.ofMinutes(snoozeMinutes.toLong())))
                 stopRinging()
             }
             else -> startRinging(intent)
@@ -42,6 +54,7 @@ class AlarmRingingService : Service() {
     private fun startRinging(intent: Intent?) {
         currentAlarmId = intent?.getLongExtra(AlarmSchedulerImpl.EXTRA_ALARM_ID, -1L) ?: -1L
         val name = intent?.getStringExtra(EXTRA_ALARM_NAME) ?: "알람"
+        snoozeMinutes = intent?.getIntExtra(EXTRA_SNOOZE_MINUTES, 5)?.coerceIn(5, 30) ?: 5
         startForeground(NOTIFICATION_ID, notificationFactory.create(currentAlarmId, name))
         if (player == null) {
             val selected = intent?.getStringExtra(EXTRA_RINGTONE_URI)
@@ -51,6 +64,11 @@ class AlarmRingingService : Service() {
                 RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)?.toString(),
             )
             player = candidates.firstNotNullOfOrNull(::startPlayer)
+            if (intent?.getBooleanExtra(EXTRA_GRADUAL_VOLUME, false) == true && player != null) {
+                volumeStep = 0
+                volumeHandler.removeCallbacks(volumeRamp)
+                volumeRamp.run()
+            }
         }
         getSystemService<Vibrator>()?.vibrate(
             VibrationEffect.createWaveform(longArrayOf(0, 500, 500), 0),
@@ -73,6 +91,7 @@ class AlarmRingingService : Service() {
     }
 
     private fun stopRinging() {
+        volumeHandler.removeCallbacks(volumeRamp)
         player?.runCatching { stop() }
         player?.release()
         player = null
@@ -82,6 +101,7 @@ class AlarmRingingService : Service() {
     }
 
     override fun onDestroy() {
+        volumeHandler.removeCallbacks(volumeRamp)
         player?.runCatching { stop() }
         player?.release()
         player = null
@@ -95,6 +115,8 @@ class AlarmRingingService : Service() {
         const val ACTION_SNOOZE = "com.smartworkalarm.action.SNOOZE"
         const val EXTRA_ALARM_NAME = "alarm_name"
         const val EXTRA_RINGTONE_URI = "ringtone_uri"
+        const val EXTRA_GRADUAL_VOLUME = "gradual_volume"
+        const val EXTRA_SNOOZE_MINUTES = "snooze_minutes"
         private const val NOTIFICATION_ID = 7001
     }
 }
