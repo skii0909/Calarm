@@ -10,7 +10,9 @@ import com.smartworkalarm.data.local.ShiftAlarmDao
 import com.smartworkalarm.data.local.ShiftPreviewDao
 import com.smartworkalarm.data.local.WorkAlarmDatabase
 import com.smartworkalarm.data.repository.AlarmRepositoryImpl
+import com.smartworkalarm.data.repository.ShiftAlarmRepositoryImpl
 import com.smartworkalarm.domain.repository.AlarmRepository
+import com.smartworkalarm.domain.repository.ShiftAlarmRepository
 import dagger.Binds
 import dagger.Module
 import dagger.Provides
@@ -24,6 +26,9 @@ import javax.inject.Singleton
 abstract class DatabaseBindings {
     @Binds
     abstract fun bindAlarmRepository(implementation: AlarmRepositoryImpl): AlarmRepository
+
+    @Binds
+    abstract fun bindShiftAlarmRepository(implementation: ShiftAlarmRepositoryImpl): ShiftAlarmRepository
 }
 
 @Module

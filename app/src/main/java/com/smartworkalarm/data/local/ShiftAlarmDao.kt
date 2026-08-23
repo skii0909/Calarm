@@ -24,6 +24,13 @@ interface ShiftAlarmDao {
     @Query("SELECT * FROM shift_alarm_groups WHERE id = :groupId")
     suspend fun getGroupWithTypes(groupId: Long): ShiftGroupWithTypes?
 
+    @Transaction
+    @Query("SELECT * FROM shift_alarm_groups ORDER BY id")
+    suspend fun getEnabledGroupsWithTypes(): List<ShiftGroupWithTypes>
+
+    @Query("SELECT * FROM shift_type_alarms WHERE id = :shiftTypeId")
+    suspend fun getShiftType(shiftTypeId: Long): ShiftTypeAlarmEntity?
+
     @Upsert
     suspend fun upsertGroup(entity: ShiftAlarmGroupEntity): Long
 
@@ -42,6 +49,15 @@ interface ShiftAlarmDao {
     @Query("DELETE FROM shift_alarm_groups WHERE id = :groupId")
     suspend fun deleteGroupRow(groupId: Long)
 
+    @Transaction
+    suspend fun deleteShiftTypeAndClearEmergency(shiftTypeId: Long) {
+        clearEmergencyShiftType(shiftTypeId)
+        deleteShiftTypeRow(shiftTypeId)
+    }
+
+    @Query("UPDATE shift_alarm_groups SET emergency_shift_type_id = NULL WHERE emergency_shift_type_id = :shiftTypeId")
+    suspend fun clearEmergencyShiftType(shiftTypeId: Long)
+
     @Query("DELETE FROM shift_type_alarms WHERE id = :shiftTypeId")
-    suspend fun deleteShiftType(shiftTypeId: Long)
+    suspend fun deleteShiftTypeRow(shiftTypeId: Long)
 }

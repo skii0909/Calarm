@@ -8,6 +8,8 @@ import com.smartworkalarm.alarm.AlarmRingerImpl
 import com.smartworkalarm.domain.usecase.SaveAlarmUseCase
 import com.smartworkalarm.presentation.alarmedit.AlarmSaver
 import com.smartworkalarm.domain.repository.AlarmScheduler
+import com.smartworkalarm.domain.repository.ShiftAlarmScheduler
+import com.smartworkalarm.domain.shift.ShiftDayEvaluator
 import dagger.Binds
 import dagger.Module
 import dagger.Provides
@@ -22,6 +24,9 @@ import java.time.ZoneId
 abstract class AlarmBindings {
     @Binds
     abstract fun bindAlarmScheduler(implementation: AlarmSchedulerImpl): AlarmScheduler
+
+    @Binds
+    abstract fun bindShiftAlarmScheduler(implementation: AlarmSchedulerImpl): ShiftAlarmScheduler
 
     @Binds
     abstract fun bindAlarmRinger(implementation: AlarmRingerImpl): AlarmRinger
@@ -46,4 +51,7 @@ object AlarmModule {
 
     @Provides
     fun provideClock(zoneId: ZoneId): Clock = Clock.system(zoneId)
+
+    @Provides
+    fun provideShiftDayEvaluator(): ShiftDayEvaluator = ShiftDayEvaluator()
 }

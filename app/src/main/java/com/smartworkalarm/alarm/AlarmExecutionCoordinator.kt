@@ -12,7 +12,9 @@ import javax.inject.Inject
 
 enum class ExecutionOutcome {
     Ringing,
+    RingingWithCalendarWarning,
     SkippedForVacation,
+    SkippedForShift,
     Ignored,
 }
 

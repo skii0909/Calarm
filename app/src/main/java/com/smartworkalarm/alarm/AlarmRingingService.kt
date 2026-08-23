@@ -13,6 +13,7 @@ import android.os.VibrationEffect
 import android.os.Vibrator
 import androidx.core.content.getSystemService
 import com.smartworkalarm.domain.repository.AlarmScheduler
+import com.smartworkalarm.domain.repository.ShiftAlarmScheduler
 import dagger.hilt.android.AndroidEntryPoint
 import java.time.Clock
 import java.time.Duration
@@ -22,10 +23,12 @@ import javax.inject.Inject
 class AlarmRingingService : Service() {
     @Inject lateinit var notificationFactory: AlarmNotificationFactory
     @Inject lateinit var scheduler: AlarmScheduler
+    @Inject lateinit var shiftScheduler: ShiftAlarmScheduler
     @Inject lateinit var clock: Clock
     private var player: MediaPlayer? = null
     private var currentAlarmId: Long = -1
     private var snoozeMinutes: Int = 5
+    private var currentIsShiftAlarm: Boolean = false
     private val volumeHandler = Handler(Looper.getMainLooper())
     private var volumeStep = 0
     private val volumeRamp = object : Runnable {
@@ -43,7 +46,12 @@ class AlarmRingingService : Service() {
             ACTION_DISMISS -> stopRinging()
             ACTION_SNOOZE -> {
                 val id = intent.getLongExtra(AlarmSchedulerImpl.EXTRA_ALARM_ID, currentAlarmId)
-                if (id >= 0) scheduler.scheduleSnooze(id, clock.instant().plus(Duration.ofMinutes(snoozeMinutes.toLong())))
+                currentIsShiftAlarm = intent.getBooleanExtra(EXTRA_IS_SHIFT_ALARM, currentIsShiftAlarm)
+                if (id >= 0) {
+                    val triggerAt = clock.instant().plus(Duration.ofMinutes(snoozeMinutes.toLong()))
+                    if (currentIsShiftAlarm) shiftScheduler.scheduleShiftSnooze(id, triggerAt)
+                    else scheduler.scheduleSnooze(id, triggerAt)
+                }
                 stopRinging()
             }
             else -> startRinging(intent)
@@ -53,9 +61,18 @@ class AlarmRingingService : Service() {
 
     private fun startRinging(intent: Intent?) {
         currentAlarmId = intent?.getLongExtra(AlarmSchedulerImpl.EXTRA_ALARM_ID, -1L) ?: -1L
+        currentIsShiftAlarm = intent?.getBooleanExtra(EXTRA_IS_SHIFT_ALARM, false) ?: false
         val name = intent?.getStringExtra(EXTRA_ALARM_NAME) ?: "알람"
         snoozeMinutes = intent?.getIntExtra(EXTRA_SNOOZE_MINUTES, 5)?.coerceIn(5, 30) ?: 5
-        startForeground(NOTIFICATION_ID, notificationFactory.create(currentAlarmId, name))
+        startForeground(
+            NOTIFICATION_ID,
+            notificationFactory.create(
+                currentAlarmId,
+                name,
+                currentIsShiftAlarm,
+                intent?.getBooleanExtra(EXTRA_CALENDAR_WARNING, false) ?: false,
+            ),
+        )
         if (player == null) {
             val selected = intent?.getStringExtra(EXTRA_RINGTONE_URI)
             val candidates = AlarmSoundResolver.candidates(
@@ -117,6 +134,8 @@ class AlarmRingingService : Service() {
         const val EXTRA_RINGTONE_URI = "ringtone_uri"
         const val EXTRA_GRADUAL_VOLUME = "gradual_volume"
         const val EXTRA_SNOOZE_MINUTES = "snooze_minutes"
+        const val EXTRA_IS_SHIFT_ALARM = "is_shift_alarm"
+        const val EXTRA_CALENDAR_WARNING = "calendar_warning"
         private const val NOTIFICATION_ID = 7001
     }
 }

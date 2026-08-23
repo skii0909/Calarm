@@ -14,19 +14,32 @@ import kotlinx.coroutines.launch
 @AndroidEntryPoint
 class AlarmBroadcastReceiver : BroadcastReceiver() {
     @Inject lateinit var coordinator: AlarmExecutionCoordinator
+    @Inject lateinit var shiftCoordinator: ShiftAlarmExecutionCoordinator
     @Inject lateinit var clock: Clock
 
     override fun onReceive(context: Context, intent: Intent) {
-        val alarmId = intent.getLongExtra(AlarmSchedulerImpl.EXTRA_ALARM_ID, -1L)
-        if (alarmId < 0) return
+        val isShift = intent.action == AlarmSchedulerImpl.ACTION_SHIFT_ALARM
+        val alarmId = intent.getLongExtra(
+            if (isShift) AlarmSchedulerImpl.EXTRA_SHIFT_TYPE_ID else AlarmSchedulerImpl.EXTRA_ALARM_ID,
+            -1L,
+        )
+        if (alarmId < 0 || (!isShift && intent.action != AlarmSchedulerImpl.ACTION_ALARM)) return
         val pendingResult = goAsync()
         CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
             try {
-                coordinator.execute(
-                    alarmId,
-                    intent.getBooleanExtra(AlarmSchedulerImpl.EXTRA_IS_SNOOZE, false),
-                    clock.instant(),
-                )
+                if (isShift) {
+                    shiftCoordinator.execute(
+                        alarmId,
+                        intent.getBooleanExtra(AlarmSchedulerImpl.EXTRA_IS_SNOOZE, false),
+                        clock.instant(),
+                    )
+                } else {
+                    coordinator.execute(
+                        alarmId,
+                        intent.getBooleanExtra(AlarmSchedulerImpl.EXTRA_IS_SNOOZE, false),
+                        clock.instant(),
+                    )
+                }
             } finally {
                 pendingResult.finish()
             }
