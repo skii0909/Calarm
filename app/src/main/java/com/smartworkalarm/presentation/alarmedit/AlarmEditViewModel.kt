@@ -25,6 +25,9 @@ data class AlarmEditState(
     val skipOnCalendarMatch: Boolean = true,
     val calendarKeywords: String = "휴가",
     val ringtoneUri: String? = null,
+    val skipOnPublicHoliday: Boolean = false,
+    val gradualVolume: Boolean = false,
+    val snoozeMinutes: Int = 5,
     val nameError: String? = null,
     val repeatDaysError: String? = null,
     val saved: Boolean = false,
@@ -53,6 +56,9 @@ class AlarmEditViewModel @Inject constructor(
                     skipOnCalendarMatch = alarm.skipOnCalendarMatch,
                     calendarKeywords = alarm.calendarKeywords.joinToString(", "),
                     ringtoneUri = alarm.ringtoneUri,
+                    skipOnPublicHoliday = alarm.skipOnPublicHoliday,
+                    gradualVolume = alarm.gradualVolume,
+                    snoozeMinutes = alarm.snoozeMinutes,
                 )
             }
         }
@@ -64,6 +70,9 @@ class AlarmEditViewModel @Inject constructor(
     fun onSkipOnCalendarMatchChanged(value: Boolean) = _state.update { it.copy(skipOnCalendarMatch = value) }
     fun onCalendarKeywordsChanged(value: String) = _state.update { it.copy(calendarKeywords = value) }
     fun onRingtoneChanged(value: String?) = _state.update { it.copy(ringtoneUri = value) }
+    fun onSkipOnPublicHolidayChanged(value: Boolean) = _state.update { it.copy(skipOnPublicHoliday = value) }
+    fun onGradualVolumeChanged(value: Boolean) = _state.update { it.copy(gradualVolume = value) }
+    fun onSnoozeMinutesChanged(value: Int) = _state.update { it.copy(snoozeMinutes = value.coerceIn(5, 30)) }
     fun toggleDay(day: RepeatDay) = _state.update {
         it.copy(repeatDaysMask = it.repeatDaysMask xor day.bit, repeatDaysError = null)
     }
@@ -98,6 +107,9 @@ class AlarmEditViewModel @Inject constructor(
         skipOnCalendarMatch,
         CalendarKeywordMatcher.normalize(calendarKeywords),
         ringtoneUri,
+        skipOnPublicHoliday,
+        gradualVolume,
+        snoozeMinutes.coerceIn(5, 30),
     )
 
 }

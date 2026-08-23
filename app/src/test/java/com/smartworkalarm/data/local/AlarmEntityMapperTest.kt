@@ -17,6 +17,9 @@ class AlarmEntityMapperTest {
             skipOnCalendarMatch = true,
             calendarKeywords = listOf("휴가", "연차"),
             ringtoneUri = "content://media/alarm/7",
+            skipOnPublicHoliday = true,
+            gradualVolume = true,
+            snoozeMinutes = 12,
         )
 
         val entity = alarm.toEntity(createdAt = 123L)

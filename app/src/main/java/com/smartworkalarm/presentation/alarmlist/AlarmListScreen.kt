@@ -54,7 +54,10 @@ fun AlarmListScreen(viewModel: AlarmListViewModel, onAdd: () -> Unit, onEdit: (L
         LazyColumn(modifier = Modifier.fillMaxSize().padding(padding).padding(16.dp)) {
             item {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Text("내 알람", style = MaterialTheme.typography.headlineMedium, modifier = Modifier.weight(1f))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("WORK ALARM", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.secondary)
+                        Text("내 알람", style = MaterialTheme.typography.headlineMedium)
+                    }
                     Button(onClick = onSettings) { Text("설정") }
                 }
             }
@@ -101,6 +104,8 @@ private fun AlarmRow(alarm: Alarm, onEdit: (Long) -> Unit, onEnabled: (Long, Boo
                         style = MaterialTheme.typography.labelMedium,
                     )
                 }
+                if (alarm.skipOnPublicHoliday) Text("공휴일 자동 끄기", style = MaterialTheme.typography.labelMedium)
+                if (alarm.gradualVolume) Text("점점 크게 · 다시 울림 ${alarm.snoozeMinutes}분", style = MaterialTheme.typography.labelMedium)
             }
             Switch(checked = alarm.enabled, onCheckedChange = { onEnabled(alarm.id, it) })
         }

@@ -53,6 +53,27 @@ class AlarmEditViewModelTest {
         assertTrue(saver.saved.single().skipOnCalendarMatch)
     }
 
+    @Test
+    fun `holiday volume and snooze settings are preserved and snooze is bounded`() = runTest(dispatcher) {
+        val saver = FakeSaver()
+        val viewModel = viewModelWith(saver)
+        viewModel.onNameChanged("출근")
+        viewModel.toggleDay(RepeatDay.MONDAY)
+        viewModel.onSkipOnPublicHolidayChanged(true)
+        viewModel.onGradualVolumeChanged(true)
+        viewModel.onSnoozeMinutesChanged(40)
+
+        assertEquals(30, viewModel.state.value.snoozeMinutes)
+        viewModel.onSnoozeMinutesChanged(12)
+        viewModel.save()
+        advanceUntilIdle()
+
+        val saved = saver.saved.single()
+        assertTrue(saved.skipOnPublicHoliday)
+        assertTrue(saved.gradualVolume)
+        assertEquals(12, saved.snoozeMinutes)
+    }
+
     private class FakeSaver : AlarmSaver {
         val saved = mutableListOf<Alarm>()
         override suspend fun save(alarm: Alarm): Result<Long> {

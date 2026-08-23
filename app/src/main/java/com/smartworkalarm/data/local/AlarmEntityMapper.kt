@@ -12,6 +12,9 @@ fun Alarm.toEntity(createdAt: Long) = AlarmEntity(
     skipOnCalendarMatch = skipOnCalendarMatch,
     calendarKeywords = calendarKeywords.joinToString(","),
     ringtoneUri = ringtoneUri,
+    skipOnPublicHoliday = skipOnPublicHoliday,
+    gradualVolume = gradualVolume,
+    snoozeMinutes = snoozeMinutes.coerceIn(5, 30),
     createdAt = createdAt,
 )
 
@@ -25,4 +28,7 @@ fun AlarmEntity.toDomain() = Alarm(
     skipOnCalendarMatch = skipOnCalendarMatch,
     calendarKeywords = calendarKeywords.split(',').map(String::trim).filter(String::isNotEmpty),
     ringtoneUri = ringtoneUri,
+    skipOnPublicHoliday = skipOnPublicHoliday,
+    gradualVolume = gradualVolume,
+    snoozeMinutes = snoozeMinutes.coerceIn(5, 30),
 )

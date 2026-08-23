@@ -8,6 +8,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -20,7 +22,7 @@ import com.smartworkalarm.domain.model.CalendarConnectionState
 @Composable
 fun SettingsScreen(state: CalendarConnectionState?, onBack: () -> Unit) {
     val context = LocalContext.current
-    Column(Modifier.fillMaxSize().padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("설정", style = MaterialTheme.typography.headlineMedium)
         Text("캘린더 연결", style = MaterialTheme.typography.titleLarge)
         Text(if (state?.isConnected == true) "연결됨" else "연결된 Google 캘린더 없음")
@@ -38,6 +40,10 @@ fun SettingsScreen(state: CalendarConnectionState?, onBack: () -> Unit) {
         Text("• 매일 22시에 다음 날 알람 상태 변화를 한 번 알려드립니다.")
         Text("• 22시 이후에는 추가 안내 없이 실제 알람 시각에 캘린더를 최종 확인합니다.")
         Text("• 캘린더 조회에 실패하면 안전하게 알람이 울립니다.")
+        Text("• 공휴일 자동 끄기는 알람별로 선택하며, 대한민국 공휴일 2026~2031년을 지원합니다.")
+        Text("• 임시공휴일은 연결된 휴대폰 캘린더 정보로 보완합니다.")
+        Text("• 추천 벨소리는 외부 서버나 다운로드 없이 앱에 포함된 자체 제작 음원입니다.")
+        Text("• 다시 울림은 알람마다 5~30분으로 설정할 수 있습니다.")
         Button(onClick = onBack, modifier = Modifier.fillMaxWidth()) { Text("돌아가기") }
     }
 }
