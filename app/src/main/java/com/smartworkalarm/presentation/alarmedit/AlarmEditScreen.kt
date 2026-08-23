@@ -47,6 +47,7 @@ import com.smartworkalarm.sound.AndroidSoundPreviewEngine
 import com.smartworkalarm.sound.SoundPreviewController
 import com.smartworkalarm.presentation.components.GradientHero
 import com.smartworkalarm.presentation.components.NightPulseSection
+import com.smartworkalarm.presentation.components.DayToggle
 
 @Composable
 fun AlarmEditScreen(viewModel: AlarmEditViewModel, alarmId: Long, onDone: () -> Unit) {
@@ -61,9 +62,8 @@ fun AlarmEditScreen(viewModel: AlarmEditViewModel, alarmId: Long, onDone: () -> 
         GradientHero {
             Text("알람 시간", color = androidx.compose.ui.graphics.Color.White.copy(alpha = .75f))
             AlarmTimePickerField(state.hour, state.minute, viewModel::onTimeChanged, hero = true)
-            SettingSwitch("알람 활성화", state.enabled, viewModel::onEnabledChanged, bright = true)
         }
-        NightPulseSection("기본 정보", "알람 이름과 반복할 요일을 정하세요") {
+        NightPulseSection("알람 정보", "이름과 반복 요일은 가장 자주 확인하는 설정입니다") {
             OutlinedTextField(
                 value = state.name,
                 onValueChange = viewModel::onNameChanged,
@@ -72,49 +72,47 @@ fun AlarmEditScreen(viewModel: AlarmEditViewModel, alarmId: Long, onDone: () -> 
                 supportingText = { state.nameError?.let { Text(it) } },
                 modifier = Modifier.fillMaxWidth(), colors = readableTextFieldColors(),
             )
-            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text("반복 요일", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 RepeatDay.entries.forEach { day ->
                     val selected = state.repeatDaysMask and day.bit != 0
-                    FilterChip(
-                        selected = selected, onClick = { viewModel.toggleDay(day) }, label = { Text(dayLabel(day)) },
-                        colors = FilterChipDefaults.filterChipColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                            labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                            selectedContainerColor = MaterialTheme.colorScheme.primary,
-                            selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
-                        ),
-                        border = FilterChipDefaults.filterChipBorder(
-                            enabled = true, selected = selected, borderColor = MaterialTheme.colorScheme.outline,
-                            selectedBorderColor = MaterialTheme.colorScheme.primary, borderWidth = 1.dp, selectedBorderWidth = 2.dp,
-                        ),
-                    )
+                    DayToggle(dayLabel(day), selected) { viewModel.toggleDay(day) }
                 }
             }
             state.repeatDaysError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         }
-        NightPulseSection("자동 건너뛰기", "쉬는 날은 이 알람만 조용하게") {
-            SettingSwitch("캘린더 일정으로 건너뛰기", state.skipOnCalendarMatch, viewModel::onSkipOnCalendarMatchChanged)
-            OutlinedTextField(
-                value = state.calendarKeywords, onValueChange = viewModel::onCalendarKeywordsChanged,
-                enabled = state.skipOnCalendarMatch, label = { Text("건너뛸 일정 키워드") },
-                placeholder = { Text("휴가, 연차, 병가") },
-                supportingText = { Text("여러 키워드는 쉼표(,)로 구분하세요.") },
-                modifier = Modifier.fillMaxWidth(), colors = readableTextFieldColors(),
-            )
-            SettingSwitch("공휴일 자동 끄기", state.skipOnPublicHoliday, viewModel::onSkipOnPublicHolidayChanged)
-            Text("대한민국 법정공휴일 2026~2031 지원", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        NightPulseSection("소리와 다시 울림", "나에게 맞는 기상 방식을 선택하세요") {
+        NightPulseSection("알람음과 다시 울림", "매일 사용할 소리와 다시 울림 간격") {
             AlarmRingtonePickerField(state.ringtoneUri, viewModel::onRingtoneChanged)
-            SettingSwitch("벨소리 점점 크게", state.gradualVolume, viewModel::onGradualVolumeChanged)
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("다시 울림")
+                Column {
+                    Text("다시 울림", style = MaterialTheme.typography.titleSmall)
+                    Text("5~30분", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     OutlinedButton(onClick = { viewModel.onSnoozeMinutesChanged(state.snoozeMinutes - 1) }, enabled = state.snoozeMinutes > 5) { Text("−") }
                     Text("${state.snoozeMinutes}분", modifier = Modifier.padding(horizontal = 12.dp), style = MaterialTheme.typography.titleMedium)
                     OutlinedButton(onClick = { viewModel.onSnoozeMinutesChanged(state.snoozeMinutes + 1) }, enabled = state.snoozeMinutes < 30) { Text("+") }
                 }
             }
+        }
+        NightPulseSection("자동 건너뛰기", "쉬는 날은 이 알람만 조용하게") {
+            SettingSwitch("캘린더 일정으로 건너뛰기", state.skipOnCalendarMatch, viewModel::onSkipOnCalendarMatchChanged)
+            OutlinedTextField(
+                value = state.calendarKeywords, onValueChange = viewModel::onCalendarKeywordsChanged,
+                readOnly = !state.skipOnCalendarMatch, label = { Text("건너뛸 일정 키워드") },
+                placeholder = { Text("휴가, 연차, 병가") },
+                supportingText = {
+                    Text(if (state.skipOnCalendarMatch) "여러 키워드는 쉼표(,)로 구분하세요." else "위 설정을 켜면 키워드를 편집할 수 있습니다.")
+                },
+                modifier = Modifier.fillMaxWidth(), colors = readableTextFieldColors(),
+            )
+            SettingSwitch("공휴일 자동 끄기", state.skipOnPublicHoliday, viewModel::onSkipOnPublicHolidayChanged)
+            Text("대한민국 법정공휴일 2026~2031 지원", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        NightPulseSection("고급 설정", "필요할 때만 조정하세요") {
+            SettingSwitch("벨소리 점점 크게", state.gradualVolume, viewModel::onGradualVolumeChanged)
+            Text("알람 소리가 1분 동안 서서히 커집니다.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            SettingSwitch("알람 활성화", state.enabled, viewModel::onEnabledChanged)
         }
         Button(onClick = viewModel::save, modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.extraLarge) { Text("알람 저장") }
         if (alarmId != 0L) OutlinedButton(onClick = { viewModel.delete() }, modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.extraLarge) { Text("알람 삭제") }
@@ -140,12 +138,13 @@ private fun AlarmRingtonePickerField(ringtoneUri: String?, onSelected: (String?)
     var showRecommended by remember { mutableStateOf(false) }
     val preview = remember(context) { SoundPreviewController(AndroidSoundPreviewEngine(context)) }
     DisposableEffect(preview) { onDispose { preview.stop() } }
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text("알람음")
-        OutlinedButton(onClick = { showRecommended = true }, modifier = Modifier.fillMaxWidth()) {
-            Text("추천 벨소리 선택")
+    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text("알람음", style = MaterialTheme.typography.titleSmall)
+            Text(title, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        OutlinedButton(
+        TextButton(onClick = { showRecommended = true }) { Text("추천음") }
+        TextButton(
             onClick = {
                 launcher.launch(Intent(RingtoneManager.ACTION_RINGTONE_PICKER).apply {
                     putExtra(RingtoneManager.EXTRA_RINGTONE_TYPE, RingtoneManager.TYPE_ALARM)
@@ -154,8 +153,7 @@ private fun AlarmRingtonePickerField(ringtoneUri: String?, onSelected: (String?)
                     putExtra(RingtoneManager.EXTRA_RINGTONE_EXISTING_URI, ringtoneUri?.let(Uri::parse))
                 })
             },
-            modifier = Modifier.fillMaxWidth(),
-        ) { Text(title) }
+        ) { Text("휴대폰") }
     }
     if (showRecommended) {
         AlertDialog(
@@ -185,13 +183,21 @@ private fun AlarmRingtonePickerField(ringtoneUri: String?, onSelected: (String?)
 
 @Composable
 private fun readableTextFieldColors() = OutlinedTextFieldDefaults.colors(
-    focusedTextColor = MaterialTheme.colorScheme.onSurface,
-    unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+    focusedTextColor = androidx.compose.ui.graphics.Color.White,
+    unfocusedTextColor = androidx.compose.ui.graphics.Color.White,
+    disabledTextColor = androidx.compose.ui.graphics.Color.White,
+    focusedContainerColor = androidx.compose.ui.graphics.Color(0xFF05070D),
+    unfocusedContainerColor = androidx.compose.ui.graphics.Color(0xFF05070D),
+    disabledContainerColor = androidx.compose.ui.graphics.Color(0xFF05070D),
     focusedLabelColor = MaterialTheme.colorScheme.secondary,
-    unfocusedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+    unfocusedLabelColor = androidx.compose.ui.graphics.Color(0xFFD5D9E6),
+    disabledLabelColor = androidx.compose.ui.graphics.Color(0xFFD5D9E6),
     cursorColor = MaterialTheme.colorScheme.secondary,
     focusedBorderColor = MaterialTheme.colorScheme.secondary,
-    unfocusedBorderColor = MaterialTheme.colorScheme.outline,
+    unfocusedBorderColor = androidx.compose.ui.graphics.Color(0xFF8A96AE),
+    disabledBorderColor = androidx.compose.ui.graphics.Color(0xFF8A96AE),
+    focusedSupportingTextColor = androidx.compose.ui.graphics.Color(0xFFD5D9E6),
+    unfocusedSupportingTextColor = androidx.compose.ui.graphics.Color(0xFFD5D9E6),
 )
 
 @OptIn(ExperimentalMaterial3Api::class)

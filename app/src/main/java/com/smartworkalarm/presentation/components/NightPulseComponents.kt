@@ -8,6 +8,9 @@ import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -16,6 +19,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.semantics.Role
 
 @Composable
 fun NightPulseSection(
@@ -57,5 +62,22 @@ fun GradientHero(content: @Composable () -> Unit) {
 fun FeaturePill(text: String) {
     Surface(shape = RoundedCornerShape(50), color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = .8f)) {
         Text(text, modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp), style = MaterialTheme.typography.labelMedium)
+    }
+}
+
+@Composable
+fun DayToggle(label: String, selected: Boolean, onClick: () -> Unit) {
+    Surface(
+        modifier = Modifier.size(42.dp).selectable(selected = selected, onClick = onClick, role = Role.Checkbox),
+        shape = RoundedCornerShape(14.dp),
+        color = if (selected) MaterialTheme.colorScheme.primary else Color(0xFF090C16),
+        contentColor = if (selected) MaterialTheme.colorScheme.onPrimary else Color.White,
+        border = BorderStroke(if (selected) 3.dp else 1.dp, if (selected) Color.White else Color(0xFF69738A)),
+        shadowElevation = if (selected) 7.dp else 0.dp,
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+            if (selected) Text("✓", style = MaterialTheme.typography.labelSmall)
+            Text(label, style = MaterialTheme.typography.labelLarge)
+        }
     }
 }
