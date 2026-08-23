@@ -45,6 +45,8 @@ import com.smartworkalarm.domain.model.RepeatDay
 import com.smartworkalarm.sound.RecommendedSoundCatalog
 import com.smartworkalarm.sound.AndroidSoundPreviewEngine
 import com.smartworkalarm.sound.SoundPreviewController
+import com.smartworkalarm.presentation.components.GradientHero
+import com.smartworkalarm.presentation.components.NightPulseSection
 
 @Composable
 fun AlarmEditScreen(viewModel: AlarmEditViewModel, alarmId: Long, onDone: () -> Unit) {
@@ -52,82 +54,71 @@ fun AlarmEditScreen(viewModel: AlarmEditViewModel, alarmId: Long, onDone: () -> 
     LaunchedEffect(alarmId) { viewModel.load(alarmId) }
     LaunchedEffect(state.saved) { if (state.saved) onDone() }
     Column(
-        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 18.dp, vertical = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        Text(if (alarmId == 0L) "알람 추가" else "알람 수정", style = MaterialTheme.typography.headlineMedium)
-        OutlinedTextField(
-            value = state.name,
-            onValueChange = viewModel::onNameChanged,
-            label = { Text("알람 이름") },
-            isError = state.nameError != null,
-            supportingText = { state.nameError?.let { Text(it) } },
-            modifier = Modifier.fillMaxWidth(),
-            colors = readableTextFieldColors(),
-        )
-        AlarmTimePickerField(state.hour, state.minute, viewModel::onTimeChanged)
-        Text("반복 요일")
-        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            RepeatDay.entries.forEach { day ->
-                FilterChip(
-                    selected = state.repeatDaysMask and day.bit != 0,
-                    onClick = { viewModel.toggleDay(day) },
-                    label = { Text(dayLabel(day)) },
-                    colors = FilterChipDefaults.filterChipColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                        labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                        selectedContainerColor = MaterialTheme.colorScheme.primary,
-                        selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
-                    ),
-                    border = FilterChipDefaults.filterChipBorder(
-                        enabled = true,
-                        selected = state.repeatDaysMask and day.bit != 0,
-                        borderColor = MaterialTheme.colorScheme.outline,
-                        selectedBorderColor = MaterialTheme.colorScheme.primary,
-                        borderWidth = 1.dp,
-                        selectedBorderWidth = 2.dp,
-                    ),
-                )
+        Text(if (alarmId == 0L) "새 알람" else "알람 편집", style = MaterialTheme.typography.headlineSmall)
+        GradientHero {
+            Text("알람 시간", color = androidx.compose.ui.graphics.Color.White.copy(alpha = .75f))
+            AlarmTimePickerField(state.hour, state.minute, viewModel::onTimeChanged, hero = true)
+            SettingSwitch("알람 활성화", state.enabled, viewModel::onEnabledChanged, bright = true)
+        }
+        NightPulseSection("기본 정보", "알람 이름과 반복할 요일을 정하세요") {
+            OutlinedTextField(
+                value = state.name,
+                onValueChange = viewModel::onNameChanged,
+                label = { Text("알람 이름") },
+                isError = state.nameError != null,
+                supportingText = { state.nameError?.let { Text(it) } },
+                modifier = Modifier.fillMaxWidth(), colors = readableTextFieldColors(),
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                RepeatDay.entries.forEach { day ->
+                    val selected = state.repeatDaysMask and day.bit != 0
+                    FilterChip(
+                        selected = selected, onClick = { viewModel.toggleDay(day) }, label = { Text(dayLabel(day)) },
+                        colors = FilterChipDefaults.filterChipColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                            labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            selectedContainerColor = MaterialTheme.colorScheme.primary,
+                            selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
+                        ),
+                        border = FilterChipDefaults.filterChipBorder(
+                            enabled = true, selected = selected, borderColor = MaterialTheme.colorScheme.outline,
+                            selectedBorderColor = MaterialTheme.colorScheme.primary, borderWidth = 1.dp, selectedBorderWidth = 2.dp,
+                        ),
+                    )
+                }
+            }
+            state.repeatDaysError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+        }
+        NightPulseSection("자동 건너뛰기", "쉬는 날은 이 알람만 조용하게") {
+            SettingSwitch("캘린더 일정으로 건너뛰기", state.skipOnCalendarMatch, viewModel::onSkipOnCalendarMatchChanged)
+            OutlinedTextField(
+                value = state.calendarKeywords, onValueChange = viewModel::onCalendarKeywordsChanged,
+                enabled = state.skipOnCalendarMatch, label = { Text("건너뛸 일정 키워드") },
+                placeholder = { Text("휴가, 연차, 병가") },
+                supportingText = { Text("여러 키워드는 쉼표(,)로 구분하세요.") },
+                modifier = Modifier.fillMaxWidth(), colors = readableTextFieldColors(),
+            )
+            SettingSwitch("공휴일 자동 끄기", state.skipOnPublicHoliday, viewModel::onSkipOnPublicHolidayChanged)
+            Text("대한민국 법정공휴일 2026~2031 지원", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        NightPulseSection("소리와 다시 울림", "나에게 맞는 기상 방식을 선택하세요") {
+            AlarmRingtonePickerField(state.ringtoneUri, viewModel::onRingtoneChanged)
+            SettingSwitch("벨소리 점점 크게", state.gradualVolume, viewModel::onGradualVolumeChanged)
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                Text("다시 울림")
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    OutlinedButton(onClick = { viewModel.onSnoozeMinutesChanged(state.snoozeMinutes - 1) }, enabled = state.snoozeMinutes > 5) { Text("−") }
+                    Text("${state.snoozeMinutes}분", modifier = Modifier.padding(horizontal = 12.dp), style = MaterialTheme.typography.titleMedium)
+                    OutlinedButton(onClick = { viewModel.onSnoozeMinutesChanged(state.snoozeMinutes + 1) }, enabled = state.snoozeMinutes < 30) { Text("+") }
+                }
             }
         }
-        state.repeatDaysError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-        SettingSwitch("알람 활성화", state.enabled, viewModel::onEnabledChanged)
-        SettingSwitch("캘린더 일정에 따라 건너뛰기", state.skipOnCalendarMatch, viewModel::onSkipOnCalendarMatchChanged)
-        OutlinedTextField(
-            value = state.calendarKeywords,
-            onValueChange = viewModel::onCalendarKeywordsChanged,
-            enabled = state.skipOnCalendarMatch,
-            label = { Text("건너뛸 일정 키워드") },
-            placeholder = { Text("휴가, 연차, 병가") },
-            supportingText = { Text("여러 키워드는 쉼표(,)로 구분하세요. 일정 제목에 키워드가 하나라도 포함되면 이 알람을 건너뜁니다.") },
-            modifier = Modifier.fillMaxWidth(),
-            colors = readableTextFieldColors(),
-        )
-        SettingSwitch("공휴일 자동 끄기", state.skipOnPublicHoliday, viewModel::onSkipOnPublicHolidayChanged)
-        Text("대한민국 법정공휴일(2026~2031)에는 이 알람만 건너뜁니다.", style = MaterialTheme.typography.bodySmall)
-        SettingSwitch("벨소리 점점 크게", state.gradualVolume, viewModel::onGradualVolumeChanged)
-        Text("알람 소리가 1분 동안 서서히 커집니다.", style = MaterialTheme.typography.bodySmall)
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            Text("다시 울림 ${state.snoozeMinutes}분")
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                OutlinedButton(
-                    onClick = { viewModel.onSnoozeMinutesChanged(state.snoozeMinutes - 1) },
-                    enabled = state.snoozeMinutes > 5,
-                ) { Text("−") }
-                Text("${state.snoozeMinutes}분", modifier = Modifier.padding(horizontal = 12.dp))
-                OutlinedButton(
-                    onClick = { viewModel.onSnoozeMinutesChanged(state.snoozeMinutes + 1) },
-                    enabled = state.snoozeMinutes < 30,
-                ) { Text("+") }
-            }
-        }
-        AlarmRingtonePickerField(state.ringtoneUri, viewModel::onRingtoneChanged)
-        Button(onClick = viewModel::save, modifier = Modifier.fillMaxWidth()) { Text("저장") }
-        if (alarmId != 0L) OutlinedButton(onClick = { viewModel.delete() }, modifier = Modifier.fillMaxWidth()) { Text("삭제") }
+        Button(onClick = viewModel::save, modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.extraLarge) { Text("알람 저장") }
+        if (alarmId != 0L) OutlinedButton(onClick = { viewModel.delete() }, modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.extraLarge) { Text("알람 삭제") }
+        androidx.compose.foundation.layout.Spacer(Modifier.padding(bottom = 8.dp))
     }
 }
 
@@ -209,10 +200,19 @@ fun AlarmTimePickerField(
     hour: Int,
     minute: Int,
     onTimeSelected: (Int, Int) -> Unit,
+    hero: Boolean = false,
 ) {
     var showPicker by remember { mutableStateOf(false) }
-    Button(onClick = { showPicker = true }, modifier = Modifier.fillMaxWidth()) {
-        Text("%02d:%02d".format(hour, minute), style = MaterialTheme.typography.headlineSmall)
+    Button(
+        onClick = { showPicker = true },
+        modifier = Modifier.fillMaxWidth(),
+        colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+            containerColor = if (hero) androidx.compose.ui.graphics.Color.White.copy(alpha = .14f) else MaterialTheme.colorScheme.primary,
+            contentColor = androidx.compose.ui.graphics.Color.White,
+        ),
+        shape = MaterialTheme.shapes.extraLarge,
+    ) {
+        Text("%02d:%02d".format(hour, minute), style = MaterialTheme.typography.displaySmall)
     }
     if (showPicker) {
         val pickerState = rememberTimePickerState(
@@ -249,9 +249,9 @@ private fun dayLabel(day: RepeatDay): String = when (day) {
 }
 
 @Composable
-private fun SettingSwitch(label: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+private fun SettingSwitch(label: String, checked: Boolean, onChange: (Boolean) -> Unit, bright: Boolean = false) {
     Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Text(label, modifier = Modifier.weight(1f))
+        Text(label, modifier = Modifier.weight(1f), color = if (bright) androidx.compose.ui.graphics.Color.White else MaterialTheme.colorScheme.onSurface)
         Switch(checked = checked, onCheckedChange = onChange)
     }
 }
