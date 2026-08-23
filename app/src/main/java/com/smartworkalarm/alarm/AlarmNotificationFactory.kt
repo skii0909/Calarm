@@ -10,13 +10,20 @@ import android.media.AudioAttributes
 import android.provider.Settings
 import androidx.core.app.NotificationCompat
 import dagger.hilt.android.qualifiers.ApplicationContext
+import java.time.Instant
 import javax.inject.Inject
 
 class AlarmNotificationFactory @Inject constructor(
     @param:ApplicationContext private val context: Context,
     private val notificationManager: NotificationManager,
 ) {
-    fun create(alarmId: Long, name: String, isShiftAlarm: Boolean = false, calendarWarning: Boolean = false): Notification {
+    fun create(
+        alarmId: Long,
+        name: String,
+        isShiftAlarm: Boolean = false,
+        calendarWarning: Boolean = false,
+        scheduledOccurrenceAt: Instant? = null,
+    ): Notification {
         ensureChannel()
         val fullScreen = PendingIntent.getActivity(
             context,
@@ -27,6 +34,9 @@ class AlarmNotificationFactory @Inject constructor(
                 putExtra(EXTRA_ALARM_NAME, name)
                 putExtra(AlarmRingingService.EXTRA_IS_SHIFT_ALARM, isShiftAlarm)
                 putExtra(AlarmRingingService.EXTRA_CALENDAR_WARNING, calendarWarning)
+                scheduledOccurrenceAt?.let {
+                    putExtra(AlarmSchedulerImpl.EXTRA_SCHEDULED_OCCURRENCE_AT, it.toEpochMilli())
+                }
             },
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )

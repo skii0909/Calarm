@@ -34,6 +34,16 @@ class ReconcileShiftAlarmsUseCaseTest {
     }
 
     @Test
+    fun `saving a type inside a draft group never schedules an alarm`() = runTest {
+        val repository = Repository(group(isDraft = true), emptyList())
+        val scheduler = Scheduler()
+
+        useCase(repository, scheduler).saveShiftType(type(id = 0, hour = 9))
+
+        assertEquals(emptyList<Pair<Long, Instant>>(), scheduler.scheduled)
+    }
+
+    @Test
     fun `editing time cancels stale pending intent and schedules new occurrence`() = runTest {
         val repository = Repository(group(), listOf(type(id = 1, hour = 7)))
         val scheduler = Scheduler()
@@ -110,8 +120,8 @@ class ReconcileShiftAlarmsUseCaseTest {
         zone,
     )
 
-    private fun group(enabled: Boolean = true, emergencyId: Long? = null) =
-        ShiftAlarmGroup(10, "교대", enabled, emergencyId)
+    private fun group(enabled: Boolean = true, emergencyId: Long? = null, isDraft: Boolean = false) =
+        ShiftAlarmGroup(10, "교대", enabled, emergencyId, isDraft)
 
     private fun type(id: Long, hour: Int = 7, enabled: Boolean = true) = ShiftTypeAlarm(
         id, 10, if (id == 2L) "야간" else "주간", listOf(if (id == 2L) "야간" else "주간"),
@@ -125,7 +135,11 @@ class ReconcileShiftAlarmsUseCaseTest {
             scheduled += shiftTypeId to triggerAt
             return ScheduleResult.Scheduled
         }
-        override fun scheduleShiftSnooze(shiftTypeId: Long, triggerAt: Instant) = ScheduleResult.Scheduled
+        override fun scheduleShiftSnooze(
+            shiftTypeId: Long,
+            triggerAt: Instant,
+            scheduledOccurrenceAt: Instant,
+        ) = ScheduleResult.Scheduled
         override fun cancelShift(shiftTypeId: Long) { cancelled += shiftTypeId }
     }
 

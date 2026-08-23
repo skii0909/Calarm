@@ -48,6 +48,10 @@ class ShiftDayEvaluatorTest {
             ),
             (result as ShiftDayEvaluation.Conflict).matches,
         )
+        assertEquals(
+            mapOf(1L to listOf("주간"), 2L to listOf("야간")),
+            result.matchedCalendarTitles,
+        )
     }
 
     @Test

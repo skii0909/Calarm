@@ -27,7 +27,7 @@ class ReconcileShiftAlarmsUseCase @Inject constructor(
         val id = repository.upsertShiftType(shiftType)
         val saved = shiftType.copy(id = if (shiftType.id == 0L) id else shiftType.id)
         val group = repository.getGroupWithTypes(saved.groupId)?.group
-        if (group?.enabled == true && saved.enabled) schedule(saved)
+        if (group?.enabled == true && !group.isDraft && saved.enabled) schedule(saved)
         return id
     }
 

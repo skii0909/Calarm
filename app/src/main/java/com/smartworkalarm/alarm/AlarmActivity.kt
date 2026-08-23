@@ -38,22 +38,29 @@ class AlarmActivity : ComponentActivity() {
         val isShiftAlarm = intent.getBooleanExtra(AlarmRingingService.EXTRA_IS_SHIFT_ALARM, false)
         val name = intent.getStringExtra(AlarmNotificationFactory.EXTRA_ALARM_NAME) ?: "알람"
         val calendarWarning = intent.getBooleanExtra(AlarmRingingService.EXTRA_CALENDAR_WARNING, false)
+        val scheduledOccurrenceAt = intent.getLongExtra(
+            AlarmSchedulerImpl.EXTRA_SCHEDULED_OCCURRENCE_AT,
+            Long.MIN_VALUE,
+        )
         setContent {
             MaterialTheme {
                 AlarmControls(
                     if (calendarWarning) "$name\n캘린더를 확인하세요" else name,
-                    onSnooze = { send(ACTION_SNOOZE, id, isShiftAlarm) },
-                    onDismiss = { send(ACTION_DISMISS, id, isShiftAlarm) },
+                    onSnooze = { send(ACTION_SNOOZE, id, isShiftAlarm, scheduledOccurrenceAt) },
+                    onDismiss = { send(ACTION_DISMISS, id, isShiftAlarm, scheduledOccurrenceAt) },
                 )
             }
         }
     }
 
-    private fun send(action: String, id: Long, isShiftAlarm: Boolean) {
+    private fun send(action: String, id: Long, isShiftAlarm: Boolean, scheduledOccurrenceAt: Long) {
         startService(Intent(this, AlarmRingingService::class.java).apply {
             this.action = action
             putExtra(AlarmSchedulerImpl.EXTRA_ALARM_ID, id)
             putExtra(AlarmRingingService.EXTRA_IS_SHIFT_ALARM, isShiftAlarm)
+            if (scheduledOccurrenceAt != Long.MIN_VALUE) {
+                putExtra(AlarmSchedulerImpl.EXTRA_SCHEDULED_OCCURRENCE_AT, scheduledOccurrenceAt)
+            }
         })
         finish()
     }

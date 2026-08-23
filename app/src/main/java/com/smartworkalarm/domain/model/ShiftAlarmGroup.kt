@@ -5,4 +5,5 @@ data class ShiftAlarmGroup(
     val name: String,
     val enabled: Boolean,
     val emergencyShiftTypeId: Long?,
+    val isDraft: Boolean = false,
 )

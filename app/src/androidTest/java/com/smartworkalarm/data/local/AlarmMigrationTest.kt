@@ -90,12 +90,17 @@ class AlarmMigrationTest {
         }
         db.query("PRAGMA table_info(shift_alarm_groups)").use { cursor ->
             var emergencyColumnIsNullable: Boolean? = null
+            var draftDefault: String? = null
             while (cursor.moveToNext()) {
-                if (cursor.getString(cursor.getColumnIndexOrThrow("name")) == "emergency_shift_type_id") {
-                    emergencyColumnIsNullable = cursor.getInt(cursor.getColumnIndexOrThrow("notnull")) == 0
+                when (cursor.getString(cursor.getColumnIndexOrThrow("name"))) {
+                    "emergency_shift_type_id" -> {
+                        emergencyColumnIsNullable = cursor.getInt(cursor.getColumnIndexOrThrow("notnull")) == 0
+                    }
+                    "is_draft" -> draftDefault = cursor.getString(cursor.getColumnIndexOrThrow("dflt_value"))
                 }
             }
             assertEquals(true, emergencyColumnIsNullable)
+            assertEquals("0", draftDefault)
         }
         db.close()
     }

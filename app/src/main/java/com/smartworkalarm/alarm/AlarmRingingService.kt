@@ -17,6 +17,7 @@ import com.smartworkalarm.domain.repository.ShiftAlarmScheduler
 import dagger.hilt.android.AndroidEntryPoint
 import java.time.Clock
 import java.time.Duration
+import java.time.Instant
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -29,6 +30,7 @@ class AlarmRingingService : Service() {
     private var currentAlarmId: Long = -1
     private var snoozeMinutes: Int = 5
     private var currentIsShiftAlarm: Boolean = false
+    private var currentScheduledOccurrenceAt: Instant? = null
     private val volumeHandler = Handler(Looper.getMainLooper())
     private var volumeStep = 0
     private val volumeRamp = object : Runnable {
@@ -49,7 +51,10 @@ class AlarmRingingService : Service() {
                 currentIsShiftAlarm = intent.getBooleanExtra(EXTRA_IS_SHIFT_ALARM, currentIsShiftAlarm)
                 if (id >= 0) {
                     val triggerAt = clock.instant().plus(Duration.ofMinutes(snoozeMinutes.toLong()))
-                    if (currentIsShiftAlarm) shiftScheduler.scheduleShiftSnooze(id, triggerAt)
+                    if (currentIsShiftAlarm) {
+                        val scheduledOccurrenceAt = intent.scheduledOccurrenceAt() ?: currentScheduledOccurrenceAt ?: triggerAt
+                        shiftScheduler.scheduleShiftSnooze(id, triggerAt, scheduledOccurrenceAt)
+                    }
                     else scheduler.scheduleSnooze(id, triggerAt)
                 }
                 stopRinging()
@@ -62,6 +67,7 @@ class AlarmRingingService : Service() {
     private fun startRinging(intent: Intent?) {
         currentAlarmId = intent?.getLongExtra(AlarmSchedulerImpl.EXTRA_ALARM_ID, -1L) ?: -1L
         currentIsShiftAlarm = intent?.getBooleanExtra(EXTRA_IS_SHIFT_ALARM, false) ?: false
+        currentScheduledOccurrenceAt = intent?.scheduledOccurrenceAt()
         val name = intent?.getStringExtra(EXTRA_ALARM_NAME) ?: "알람"
         snoozeMinutes = intent?.getIntExtra(EXTRA_SNOOZE_MINUTES, 5)?.coerceIn(5, 30) ?: 5
         startForeground(
@@ -71,6 +77,7 @@ class AlarmRingingService : Service() {
                 name,
                 currentIsShiftAlarm,
                 intent?.getBooleanExtra(EXTRA_CALENDAR_WARNING, false) ?: false,
+                currentScheduledOccurrenceAt,
             ),
         )
         if (player == null) {
@@ -139,3 +146,8 @@ class AlarmRingingService : Service() {
         private const val NOTIFICATION_ID = 7001
     }
 }
+
+private fun Intent.scheduledOccurrenceAt(): Instant? =
+    getLongExtra(AlarmSchedulerImpl.EXTRA_SCHEDULED_OCCURRENCE_AT, Long.MIN_VALUE)
+        .takeIf { it != Long.MIN_VALUE }
+        ?.let(Instant::ofEpochMilli)

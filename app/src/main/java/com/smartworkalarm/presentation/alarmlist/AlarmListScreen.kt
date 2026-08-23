@@ -41,7 +41,7 @@ import com.smartworkalarm.presentation.components.FeaturePill
 import com.smartworkalarm.presentation.components.GradientHero
 import com.smartworkalarm.presentation.shift.ShiftGroupListItem
 import com.smartworkalarm.presentation.shift.ShiftGroupListViewModel
-import com.smartworkalarm.presentation.shift.todayStatus
+import com.smartworkalarm.presentation.shift.shiftStatusText
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
@@ -166,7 +166,8 @@ private fun ShiftGroupRow(item: ShiftGroupListItem, onClick: () -> Unit) {
                 Text(item.group.name, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
                 Switch(checked = item.group.enabled, onCheckedChange = null)
             }
-            Text("오늘 근무 · ${todayStatus(item.status)}", color = MaterialTheme.colorScheme.secondary)
+            Text("오늘 근무 · ${shiftStatusText(item.status)}", color = MaterialTheme.colorScheme.secondary)
+            Text("내일 근무 · ${shiftStatusText(item.tomorrowStatus)}", color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text(
                 item.nextAlarm?.let {
                     val time = DateTimeFormatter.ofPattern("MM.dd HH:mm").format(it.triggerAt.atZone(ZoneId.systemDefault()))
@@ -174,7 +175,17 @@ private fun ShiftGroupRow(item: ShiftGroupListItem, onClick: () -> Unit) {
                 } ?: "다음 알람 · 없음",
                 style = MaterialTheme.typography.bodyMedium,
             )
-            Text("근무 형태 ${item.shiftTypes.size}개 · ${if (warning) "캘린더 확인 필요" else "캘린더 연결됨"}", style = MaterialTheme.typography.bodySmall)
+            val connectionText = when {
+                !item.calendarConnection.permissionGranted -> "캘린더 권한 없음"
+                item.calendarConnection.calendars.isEmpty() -> "연결된 캘린더 없음"
+                else -> "연결된 캘린더 ${item.calendarConnection.calendars.size}개"
+            }
+            Text("근무 형태 ${item.shiftTypes.size}개 · $connectionText", style = MaterialTheme.typography.bodySmall)
+            Text(
+                "최근 조회 · ${if (item.lastCalendarQuery.succeeded) "성공" else "실패"}" +
+                    if (warning) " · 캘린더 확인 필요" else "",
+                style = MaterialTheme.typography.bodySmall,
+            )
         }
     }
 }

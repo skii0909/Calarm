@@ -1,6 +1,7 @@
 package com.smartworkalarm.presentation.shift
 
 import androidx.compose.foundation.clickable
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -40,6 +41,8 @@ import com.smartworkalarm.presentation.alarmedit.readableTextFieldColors
 import com.smartworkalarm.presentation.components.FeaturePill
 import com.smartworkalarm.presentation.components.GradientHero
 import com.smartworkalarm.presentation.components.NightPulseSection
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 
 @Composable
 fun ShiftGroupScreen(
@@ -51,6 +54,7 @@ fun ShiftGroupScreen(
     val state by viewModel.state.collectAsState()
     LaunchedEffect(groupId) { viewModel.loadGroup(groupId) }
     LaunchedEffect(state.saved, state.deleted) { if (state.saved || state.deleted) onDone() }
+    BackHandler(enabled = state.isDraft) { viewModel.cancelDraft() }
     ShiftGroupScreen(
         state = state,
         onNameChanged = viewModel::onGroupNameChanged,
@@ -87,10 +91,36 @@ fun ShiftGroupScreen(
         Text("교대 알람 그룹", style = MaterialTheme.typography.headlineSmall)
         GradientHero {
             Text("오늘 근무", color = Color.White.copy(alpha = .75f))
-            Text(todayStatus(state.todayStatus), style = MaterialTheme.typography.headlineMedium, color = Color.White)
-            Text(todayStatusDetail(state.todayStatus), color = Color.White.copy(alpha = .82f))
+            Text(shiftStatusText(state.todayStatus), style = MaterialTheme.typography.headlineMedium, color = Color.White)
+            Text(shiftStatusDetail(state.todayStatus, "오늘"), color = Color.White.copy(alpha = .82f))
         }
         todayCalendarWarning(state.todayStatus)?.let { CalendarWarning(it) }
+        Card(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text("내일 근무", style = MaterialTheme.typography.titleSmall)
+                Text(shiftStatusText(state.tomorrowStatus), style = MaterialTheme.typography.titleLarge)
+                Text(shiftStatusDetail(state.tomorrowStatus, "내일"), color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+        Card(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                val connectionText = when {
+                    !state.calendarConnection.permissionGranted -> "캘린더 권한 없음"
+                    state.calendarConnection.calendars.isEmpty() -> "연결된 캘린더 없음"
+                    else -> "연결된 캘린더 ${state.calendarConnection.calendars.size}개"
+                }
+                Text("캘린더 상태", style = MaterialTheme.typography.titleSmall)
+                Text(connectionText)
+                state.lastCalendarQuery?.let { query ->
+                    val time = DateTimeFormatter.ofPattern("MM.dd HH:mm")
+                        .format(query.queriedAt.atZone(ZoneId.systemDefault()))
+                    Text(
+                        "최근 캘린더 조회 · ${if (query.succeeded) "성공" else "실패"} · $time",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        }
         NightPulseSection("그룹 설정", "이 그룹 안에서는 캘린더에 맞는 근무 알람 하나만 적용됩니다") {
             OutlinedTextField(
                 value = state.name,
@@ -186,8 +216,8 @@ private fun CalendarWarning(message: String) {
     }
 }
 
-fun todayStatus(status: ShiftGroupDayStatus?): String = when (status) {
-    ShiftGroupDayStatus.Inactive -> "오늘 비활성"
+fun shiftStatusText(status: ShiftGroupDayStatus?): String = when (status) {
+    ShiftGroupDayStatus.Inactive -> "비활성"
     ShiftGroupDayStatus.Vacation -> "휴가"
     ShiftGroupDayStatus.PublicHoliday -> "공휴일"
     is ShiftGroupDayStatus.Matched -> status.shiftType.name
@@ -196,6 +226,8 @@ fun todayStatus(status: ShiftGroupDayStatus?): String = when (status) {
     is ShiftGroupDayStatus.ReadFailure -> "캘린더 조회 실패"
     null -> "확인 중"
 }
+
+fun todayStatus(status: ShiftGroupDayStatus?): String = shiftStatusText(status)
 
 fun todayCalendarWarning(status: ShiftGroupDayStatus?): String? = when (status) {
     is ShiftGroupDayStatus.ReadFailure -> if (status.emergencyType == null) {
@@ -213,15 +245,15 @@ fun todayCalendarWarning(status: ShiftGroupDayStatus?): String? = when (status) 
     -> null
 }
 
-private fun todayStatusDetail(status: ShiftGroupDayStatus?): String = when (status) {
-    ShiftGroupDayStatus.Inactive -> "오늘 활성화된 반복 근무 알람이 없습니다."
-    ShiftGroupDayStatus.Vacation -> "휴가 일정이 우선되어 오늘 교대 알람은 울리지 않습니다."
+fun shiftStatusDetail(status: ShiftGroupDayStatus?, dayLabel: String): String = when (status) {
+    ShiftGroupDayStatus.Inactive -> "$dayLabel 활성화된 반복 근무 알람이 없습니다."
+    ShiftGroupDayStatus.Vacation -> "휴가 일정이 우선되어 $dayLabel 교대 알람은 울리지 않습니다."
     ShiftGroupDayStatus.PublicHoliday -> "공휴일 자동 끄기가 적용되었습니다."
-    is ShiftGroupDayStatus.Matched -> "오늘은 ${status.shiftType.name} 알람이 적용됩니다."
-    ShiftGroupDayStatus.None -> "오늘 교대 그룹 알람은 울리지 않습니다."
+    is ShiftGroupDayStatus.Matched -> "${dayLabel}은 ${status.shiftType.name} 알람이 적용됩니다."
+    ShiftGroupDayStatus.None -> "$dayLabel 교대 그룹 알람은 울리지 않습니다."
     is ShiftGroupDayStatus.Conflict -> status.shiftTypes.joinToString(" · ") { it.name }
     is ShiftGroupDayStatus.ReadFailure -> if (status.emergencyType == null) {
-        "오늘 사용할 수 있는 비상 기본 알람이 없습니다."
+        "$dayLabel 사용할 수 있는 비상 기본 알람이 없습니다."
     } else {
         "지정한 비상 기본 알람을 사용합니다."
     }

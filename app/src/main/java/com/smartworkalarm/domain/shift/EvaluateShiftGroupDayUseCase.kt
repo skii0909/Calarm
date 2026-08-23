@@ -56,7 +56,10 @@ class EvaluateShiftGroupDayUseCase @Inject constructor(
             )
             ShiftDayEvaluation.None -> ShiftGroupDayStatus.None
             is ShiftDayEvaluation.Conflict -> ShiftGroupDayStatus.Conflict(
-                evaluation.matches.mapNotNull { match -> effectiveTypes.firstOrNull { it.id == match.shiftTypeId } },
+                shiftTypes = evaluation.matches.mapNotNull { match ->
+                    effectiveTypes.firstOrNull { it.id == match.shiftTypeId }
+                },
+                matchedCalendarTitles = evaluation.matchedCalendarTitles,
             )
             ShiftDayEvaluation.ReadFailure -> readFailure(aggregate, effectiveTypes)
         }

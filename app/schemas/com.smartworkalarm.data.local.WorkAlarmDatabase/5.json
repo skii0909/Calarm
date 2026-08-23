@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "database": {
     "version": 5,
-    "identityHash": "3482838cdcd8e74c491feb1fdbd7bea2",
+    "identityHash": "11ac865d23514a896e42521a251f5a0d",
     "entities": [
       {
         "tableName": "alarms",
@@ -136,7 +136,7 @@
       },
       {
         "tableName": "shift_alarm_groups",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `name` TEXT NOT NULL, `enabled` INTEGER NOT NULL, `emergency_shift_type_id` INTEGER)",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `name` TEXT NOT NULL, `enabled` INTEGER NOT NULL, `emergency_shift_type_id` INTEGER, `is_draft` INTEGER NOT NULL DEFAULT 0)",
         "fields": [
           {
             "fieldPath": "id",
@@ -160,6 +160,13 @@
             "fieldPath": "emergencyShiftTypeId",
             "columnName": "emergency_shift_type_id",
             "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "isDraft",
+            "columnName": "is_draft",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
           }
         ],
         "primaryKey": {
@@ -296,7 +303,7 @@
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '3482838cdcd8e74c491feb1fdbd7bea2')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '11ac865d23514a896e42521a251f5a0d')"
     ]
   }
 }

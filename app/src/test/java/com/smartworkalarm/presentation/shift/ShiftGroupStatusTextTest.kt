@@ -7,6 +7,15 @@ import org.junit.Test
 
 class ShiftGroupStatusTextTest {
     @Test
+    fun `tomorrow status text does not describe tomorrow as today`() {
+        assertEquals("비활성", shiftStatusText(ShiftGroupDayStatus.Inactive))
+        assertEquals(
+            "내일은 주간 알람이 적용됩니다.",
+            shiftStatusDetail(ShiftGroupDayStatus.Matched(type()), "내일"),
+        )
+    }
+
+    @Test
     fun `read failure says configured eligible emergency will apply`() {
         val status = ShiftGroupDayStatus.ReadFailure(type())
 

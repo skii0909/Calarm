@@ -10,4 +10,5 @@ data class ShiftAlarmGroupEntity(
     val name: String,
     val enabled: Boolean,
     @ColumnInfo(name = "emergency_shift_type_id") val emergencyShiftTypeId: Long? = null,
+    @ColumnInfo(name = "is_draft", defaultValue = "0") val isDraft: Boolean = false,
 )

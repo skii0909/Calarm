@@ -1,10 +1,18 @@
 package com.smartworkalarm.data.local
 
 import com.smartworkalarm.domain.model.ShiftTypeAlarm
+import com.smartworkalarm.domain.model.ShiftAlarmGroup
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class ShiftAlarmMapperTest {
+    @Test
+    fun `group mapper preserves draft visibility marker`() {
+        val draft = ShiftAlarmGroup(4, "작성 중", enabled = false, emergencyShiftTypeId = null, isDraft = true)
+
+        assertEquals(draft, draft.toEntity().toDomain())
+    }
+
     @Test
     fun `shift type mapper preserves exact title aliases and alarm settings`() {
         val value = ShiftTypeAlarm(

@@ -15,7 +15,9 @@ class ShiftAlarmRepositoryImpl @Inject constructor(
     private val dao: ShiftAlarmDao,
 ) : ShiftAlarmRepository {
     override fun observeGroupsWithTypes(): Flow<List<ShiftAlarmRepository.GroupWithTypes>> =
-        dao.observeGroupsWithTypes().map { groups -> groups.map(ShiftGroupWithTypes::toDomain) }
+        dao.observeGroupsWithTypes().map { groups ->
+            groups.map(ShiftGroupWithTypes::toDomain).filterNot { it.group.isDraft }
+        }
 
     override suspend fun getGroupWithTypes(groupId: Long): ShiftAlarmRepository.GroupWithTypes? =
         dao.getGroupWithTypes(groupId)?.toDomain()
@@ -24,7 +26,11 @@ class ShiftAlarmRepositoryImpl @Inject constructor(
 
     override suspend fun getEnabledShiftTypes(): List<ShiftTypeAlarm> =
         dao.getEnabledGroupsWithTypes().flatMap { group ->
-            if (group.group.enabled) group.shiftTypes.filter { it.enabled }.map { it.toDomain() } else emptyList()
+            if (group.group.enabled && !group.group.isDraft) {
+                group.shiftTypes.filter { it.enabled }.map { it.toDomain() }
+            } else {
+                emptyList()
+            }
         }
 
     override suspend fun upsertGroup(group: ShiftAlarmGroup): Long = dao.upsertGroup(group.toEntity())

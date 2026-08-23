@@ -16,19 +16,23 @@ class ShiftDayEvaluator {
         types: List<ShiftTypeAlarm>,
         events: List<CalendarEvent>,
     ): ShiftDayEvaluation {
-        val matches = types
-            .filter { type ->
-                events.any { event ->
-                    ExactShiftTitleMatcher.matches(event.title, type.exactTitles)
-                }
+        val matches = types.distinctBy { it.id }.mapNotNull { type ->
+            val calendarTitles = events.mapNotNull { event ->
+                ExactShiftTitleMatcher.normalizedMatch(event.title, type.exactTitles)
             }
-            .distinctBy { it.id }
-            .map { type -> ShiftDayEvaluation.Matched(type.id, type.name) }
+                .distinct()
+                .sorted()
+            if (calendarTitles.isEmpty()) null
+            else ShiftDayEvaluation.Matched(type.id, type.name) to calendarTitles
+        }
 
         return when (matches.size) {
             0 -> ShiftDayEvaluation.None
-            1 -> matches.single()
-            else -> ShiftDayEvaluation.Conflict(matches)
+            1 -> matches.single().first
+            else -> ShiftDayEvaluation.Conflict(
+                matches = matches.map { it.first },
+                matchedCalendarTitles = matches.associate { (match, titles) -> match.shiftTypeId to titles },
+            )
         }
     }
 }

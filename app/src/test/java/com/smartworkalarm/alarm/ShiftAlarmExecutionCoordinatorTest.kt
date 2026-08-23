@@ -13,6 +13,7 @@ import com.smartworkalarm.domain.shift.ShiftDayEvaluator
 import com.smartworkalarm.domain.shift.EvaluateShiftGroupDayUseCase
 import com.smartworkalarm.domain.usecase.CalculateNextOccurrenceUseCase
 import java.time.Instant
+import java.time.LocalDate
 import java.time.ZoneId
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
@@ -86,6 +87,68 @@ class ShiftAlarmExecutionCoordinatorTest {
     }
 
     @Test
+    fun `delayed regular delivery evaluates its scheduled date and preserves recurrence chain`() = runTest {
+        val scheduledOccurrence = Instant.parse("2026-08-24T14:55:00Z")
+        val delayedDelivery = Instant.parse("2026-08-24T15:05:00Z")
+        val mondayNight = night.copy(hour = 23, minute = 55, repeatDaysMask = 1)
+        var evaluatedDate: LocalDate? = null
+        var nextRegular: Instant? = null
+        val coordinator = ShiftAlarmExecutionCoordinator(
+            repository = Repository(group = ShiftAlarmGroup(10, "교대", true, null), types = listOf(mondayNight)),
+            scheduler = Scheduler(onSchedule = {}, onTrigger = { nextRegular = it }),
+            calculator = CalculateNextOccurrenceUseCase(),
+            decisionProvider = { _, _, date ->
+                evaluatedDate = date
+                ShiftExecutionDecision.Evaluated(ShiftDayEvaluation.Matched(mondayNight.id, mondayNight.name))
+            },
+            ringer = noOpRinger(),
+            zoneId = zone,
+        )
+
+        val outcome = coordinator.execute(
+            shiftTypeId = mondayNight.id,
+            isSnooze = false,
+            now = delayedDelivery,
+            scheduledOccurrenceAt = scheduledOccurrence,
+        )
+
+        assertEquals(ExecutionOutcome.Ringing, outcome)
+        assertEquals(LocalDate.of(2026, 8, 24), evaluatedDate)
+        assertEquals(Instant.parse("2026-08-31T14:55:00Z"), nextRegular)
+    }
+
+    @Test
+    fun `snooze crossing midnight evaluates the original scheduled occurrence date`() = runTest {
+        val scheduledOccurrence = Instant.parse("2026-08-24T14:55:00Z")
+        val snoozeDelivery = Instant.parse("2026-08-24T15:05:00Z")
+        val mondayNight = night.copy(hour = 23, minute = 55, repeatDaysMask = 1)
+        var evaluatedDate: LocalDate? = null
+        var regularSchedules = 0
+        val coordinator = ShiftAlarmExecutionCoordinator(
+            repository = Repository(group = ShiftAlarmGroup(10, "교대", true, null), types = listOf(mondayNight)),
+            scheduler = Scheduler(onSchedule = { regularSchedules++ }),
+            calculator = CalculateNextOccurrenceUseCase(),
+            decisionProvider = { _, _, date ->
+                evaluatedDate = date
+                ShiftExecutionDecision.Evaluated(ShiftDayEvaluation.Matched(mondayNight.id, mondayNight.name))
+            },
+            ringer = noOpRinger(),
+            zoneId = zone,
+        )
+
+        val outcome = coordinator.execute(
+            shiftTypeId = mondayNight.id,
+            isSnooze = true,
+            now = snoozeDelivery,
+            scheduledOccurrenceAt = scheduledOccurrence,
+        )
+
+        assertEquals(ExecutionOutcome.Ringing, outcome)
+        assertEquals(LocalDate.of(2026, 8, 24), evaluatedDate)
+        assertEquals(0, regularSchedules)
+    }
+
+    @Test
     fun `production calendar policy skips a vacation event before a matched shift`() = runTest {
         val coordinator = productionCoordinator(Result.success(listOf(event("여름휴가"))))
 
@@ -146,9 +209,7 @@ class ShiftAlarmExecutionCoordinatorTest {
             if (vacation || publicHoliday) ShiftExecutionDecision.SkipForVacation
             else ShiftExecutionDecision.Evaluated(result)
         },
-        ringer = object : AlarmRinger {
-            override fun start(alarmId: Long, alarmName: String, ringtoneUri: String?, gradualVolume: Boolean, snoozeMinutes: Int) = Unit
-        },
+        ringer = noOpRinger(),
         zoneId = zone,
     )
 
@@ -168,9 +229,7 @@ class ShiftAlarmExecutionCoordinatorTest {
             }
         },
         effectiveEvaluator = EvaluateShiftGroupDayUseCase(ShiftDayEvaluator(), KoreanPublicHolidayProvider()),
-        ringer = object : AlarmRinger {
-            override fun start(alarmId: Long, alarmName: String, ringtoneUri: String?, gradualVolume: Boolean, snoozeMinutes: Int) = Unit
-        },
+        ringer = noOpRinger(),
         zoneId = zone,
     )
 
@@ -214,13 +273,25 @@ class ShiftAlarmExecutionCoordinatorTest {
         override suspend fun deleteShiftType(shiftTypeId: Long) = Unit
     }
 
-    private class Scheduler(private val onSchedule: () -> Unit) : ShiftAlarmScheduler {
+    private fun noOpRinger() = object : AlarmRinger {
+        override fun start(alarmId: Long, alarmName: String, ringtoneUri: String?, gradualVolume: Boolean, snoozeMinutes: Int) = Unit
+    }
+
+    private class Scheduler(
+        private val onSchedule: () -> Unit,
+        private val onTrigger: (Instant) -> Unit = {},
+    ) : ShiftAlarmScheduler {
         override fun scheduleShift(shiftTypeId: Long, triggerAt: Instant): ScheduleResult {
             onSchedule()
+            onTrigger(triggerAt)
             return ScheduleResult.Scheduled
         }
 
-        override fun scheduleShiftSnooze(shiftTypeId: Long, triggerAt: Instant): ScheduleResult = ScheduleResult.Scheduled
+        override fun scheduleShiftSnooze(
+            shiftTypeId: Long,
+            triggerAt: Instant,
+            scheduledOccurrenceAt: Instant,
+        ): ScheduleResult = ScheduleResult.Scheduled
         override fun cancelShift(shiftTypeId: Long) = Unit
     }
 }

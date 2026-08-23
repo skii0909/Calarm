@@ -1,9 +1,12 @@
 package com.smartworkalarm.presentation.shift
 
 import com.smartworkalarm.domain.model.CalendarEvent
+import com.smartworkalarm.domain.model.CalendarConnectionState
+import com.smartworkalarm.domain.model.ConnectedCalendar
 import com.smartworkalarm.domain.model.ShiftAlarmGroup
 import com.smartworkalarm.domain.model.ShiftTypeAlarm
 import com.smartworkalarm.domain.repository.CalendarEventSource
+import com.smartworkalarm.domain.repository.CalendarConnectionRepository
 import com.smartworkalarm.domain.repository.ShiftAlarmRepository
 import com.smartworkalarm.domain.repository.ShiftAlarmScheduler
 import com.smartworkalarm.domain.repository.ScheduleResult
@@ -15,6 +18,7 @@ import com.smartworkalarm.domain.usecase.CalculateNextOccurrenceUseCase
 import com.smartworkalarm.domain.usecase.ReconcileShiftAlarmsUseCase
 import java.time.Clock
 import java.time.Instant
+import java.time.LocalDate
 import java.time.ZoneId
 import java.time.ZoneOffset
 import kotlinx.coroutines.Dispatchers
@@ -103,11 +107,12 @@ class ShiftGroupEditViewModelTest {
 
         assertEquals("병원 근무", repository.savedGroups.last().name)
         assertEquals(2L, repository.savedGroups.last().emergencyShiftTypeId)
+        assertEquals(false, repository.savedGroups.last().isDraft)
         assertTrue(viewModel.state.value.saved)
     }
 
     @Test
-    fun `creating the first shift type persists an inactive draft group`() = runTest(dispatcher) {
+    fun `creating the first shift type persists a hidden draft without losing enabled choice`() = runTest(dispatcher) {
         val repository = FakeShiftRepository(groupWithTypes())
         val viewModel = viewModel(repository)
         viewModel.onGroupNameChanged("  병원 근무  ")
@@ -118,7 +123,22 @@ class ShiftGroupEditViewModelTest {
 
         assertEquals(11L, createdId)
         assertEquals("병원 근무", repository.savedGroups.single().name)
-        assertEquals(false, repository.savedGroups.single().enabled)
+        assertEquals(true, repository.savedGroups.single().enabled)
+        assertEquals(true, repository.savedGroups.single().isDraft)
+    }
+
+    @Test
+    fun `cancelling a persisted draft deletes the abandoned group`() = runTest(dispatcher) {
+        val repository = FakeShiftRepository(groupWithTypes())
+        val viewModel = viewModel(repository)
+        viewModel.onGroupNameChanged("병원 근무")
+        viewModel.createDraftAndAddShiftType {}
+        advanceUntilIdle()
+
+        viewModel.cancelDraft()
+        advanceUntilIdle()
+
+        assertEquals(listOf(11L), repository.deletedGroups)
     }
 
     @Test
@@ -183,9 +203,34 @@ class ShiftGroupEditViewModelTest {
         assertEquals(ShiftGroupDayStatus.Matched(type(2, "야간", listOf("야간"))), viewModel.state.value.todayStatus)
     }
 
+    @Test
+    fun `loading group exposes tomorrow evaluation connection and last local query status`() = runTest(dispatcher) {
+        val repository = FakeShiftRepository(groupWithTypes())
+        val today = LocalDate.of(2026, 8, 23)
+        val tomorrow = today.plusDays(1)
+        val source = object : CalendarEventSource {
+            override suspend fun getEventsOverlapping(startInclusive: Instant, endExclusive: Instant) =
+                when (startInclusive.atZone(zoneId).toLocalDate()) {
+                    today -> Result.success(listOf(CalendarEvent("주간", startInclusive, endExclusive, true)))
+                    tomorrow -> Result.success(listOf(CalendarEvent("야간", startInclusive, endExclusive, true)))
+                    else -> Result.success(emptyList())
+                }
+        }
+        val connection = CalendarConnectionState(true, listOf(ConnectedCalendar(7, "근무표")))
+        val viewModel = viewModel(repository, source, connection)
+
+        viewModel.loadGroup(10)
+        advanceUntilIdle()
+
+        assertEquals(2L, (viewModel.state.value.tomorrowStatus as ShiftGroupDayStatus.Matched).shiftType.id)
+        assertEquals(connection, viewModel.state.value.calendarConnection)
+        assertEquals(CalendarQueryStatus(clock.instant(), succeeded = true), viewModel.state.value.lastCalendarQuery)
+    }
+
     private fun viewModel(
         repository: FakeShiftRepository,
         source: CalendarEventSource = eventSource(Result.success(emptyList())),
+        connection: CalendarConnectionState = CalendarConnectionState(false, emptyList()),
     ) = ShiftGroupEditViewModel(
         repository,
         ReconcileShiftAlarmsUseCase(repository, NoOpShiftScheduler, CalculateNextOccurrenceUseCase(), clock, zoneId),
@@ -193,6 +238,9 @@ class ShiftGroupEditViewModelTest {
         EvaluateShiftGroupDayUseCase(ShiftDayEvaluator(), KoreanPublicHolidayProvider()),
         clock,
         zoneId,
+        object : CalendarConnectionRepository {
+            override fun getState() = connection
+        },
     )
 
     private fun eventSource(result: Result<List<CalendarEvent>>) = object : CalendarEventSource {
@@ -228,6 +276,7 @@ class ShiftGroupEditViewModelTest {
         private val groups = MutableStateFlow(listOf(initial))
         val savedGroups = mutableListOf<ShiftAlarmGroup>()
         val savedTypes = mutableListOf<ShiftTypeAlarm>()
+        val deletedGroups = mutableListOf<Long>()
 
         override fun observeGroupsWithTypes() = groups
         override suspend fun getGroupWithTypes(groupId: Long) = groups.value.firstOrNull { it.group.id == groupId }
@@ -241,13 +290,17 @@ class ShiftGroupEditViewModelTest {
             savedTypes += shiftType
             return if (shiftType.id == 0L) 3L else shiftType.id
         }
-        override suspend fun deleteGroup(groupId: Long) = Unit
+        override suspend fun deleteGroup(groupId: Long) { deletedGroups += groupId }
         override suspend fun deleteShiftType(shiftTypeId: Long) = Unit
     }
 
     private object NoOpShiftScheduler : ShiftAlarmScheduler {
         override fun scheduleShift(shiftTypeId: Long, triggerAt: Instant) = ScheduleResult.Scheduled
-        override fun scheduleShiftSnooze(shiftTypeId: Long, triggerAt: Instant) = ScheduleResult.Scheduled
+        override fun scheduleShiftSnooze(
+            shiftTypeId: Long,
+            triggerAt: Instant,
+            scheduledOccurrenceAt: Instant,
+        ) = ScheduleResult.Scheduled
         override fun cancelShift(shiftTypeId: Long) = Unit
     }
 }

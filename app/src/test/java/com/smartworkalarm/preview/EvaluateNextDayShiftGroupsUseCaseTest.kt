@@ -7,6 +7,8 @@ import com.smartworkalarm.domain.model.ShiftAlarmGroup
 import com.smartworkalarm.domain.model.ShiftTypeAlarm
 import com.smartworkalarm.domain.repository.CalendarEventSource
 import com.smartworkalarm.domain.repository.ShiftAlarmRepository
+import com.smartworkalarm.domain.holiday.KoreanPublicHolidayProvider
+import com.smartworkalarm.domain.shift.EvaluateShiftGroupDayUseCase
 import com.smartworkalarm.domain.shift.ShiftDayEvaluation
 import com.smartworkalarm.domain.shift.ShiftDayEvaluator
 import java.time.Clock
@@ -100,36 +102,56 @@ class EvaluateNextDayShiftGroupsUseCaseTest {
         calendar.eventsByDate[tomorrow] = listOf(event(tomorrow, "야간"), event(tomorrow, "주간"), event(tomorrow, "야간"))
 
         assertTrue(useCase.execute(today, tomorrow, zone).isEmpty())
-        assertEquals("CONFLICT:1,2", previews.get(group.id)?.stateKey)
+        assertEquals("CONFLICT:1:2:주간|2:2:야간", previews.get(group.id)?.stateKey)
     }
 
     @Test
-    fun `vacation cannot hide a day and night conflict`() = runTest {
+    fun `conflict title content change emits warning even when type ids are unchanged`() = runTest {
+        val aliasedDay = day.copy(exactTitles = listOf("주간", "주간근무"))
+        calendar.eventsByDate[today] = listOf(event(today, "주간"), event(today, "야간"))
+        calendar.eventsByDate[tomorrow] = listOf(event(tomorrow, " 주간근무 "), event(tomorrow, "야간"))
+
+        val change = useCase(aliasedDay, night).execute(today, tomorrow, zone).single()
+
+        assertEquals("CONFLICT:1:2:주간|2:2:야간", change.previousKey)
+        assertEquals("CONFLICT:1:4:주간근무|2:2:야간", change.currentKey)
+        assertEquals(
+            listOf("주간근무"),
+            (change.currentEvaluation as ShiftDayEvaluation.Conflict).matchedCalendarTitles.getValue(1L),
+        )
+    }
+
+    @Test
+    fun `vacation takes priority over conflict exactly as runtime`() = runTest {
         calendar.eventsByDate[today] = listOf(event(today, "여름휴가"), event(today, "주간"), event(today, "야간"))
         calendar.eventsByDate[tomorrow] = listOf(event(tomorrow, "야간"), event(tomorrow, "여름휴가"), event(tomorrow, "주간"))
 
         assertTrue(useCase.execute(today, tomorrow, zone).isEmpty())
-        assertEquals("CONFLICT:1,2", previews.get(group.id)?.stateKey)
+        assertEquals("NONE", previews.get(group.id)?.stateKey)
     }
 
     @Test
-    fun `calendar holiday cannot hide a day and night conflict`() = runTest {
+    fun `calendar holiday evaluates only types that do not skip holidays exactly as runtime`() = runTest {
+        val mixedHolidayUseCase = useCase(day, night.copy(skipOnPublicHoliday = false))
         calendar.eventsByDate[today] = listOf(event(today, "대한민국 임시공휴일"), event(today, "주간"), event(today, "야간"))
         calendar.eventsByDate[tomorrow] = listOf(event(tomorrow, "야간"), event(tomorrow, "대한민국 임시공휴일"), event(tomorrow, "주간"))
 
-        assertTrue(useCase.execute(today, tomorrow, zone).isEmpty())
-        assertEquals("CONFLICT:1,2", previews.get(group.id)?.stateKey)
+        assertTrue(mixedHolidayUseCase.execute(today, tomorrow, zone).isEmpty())
+        assertEquals("MATCHED:2", previews.get(group.id)?.stateKey)
     }
 
     @Test
-    fun `local holiday cannot hide a day and night conflict`() = runTest {
+    fun `statutory holiday filters types before matching exactly as runtime`() = runTest {
         val holiday = LocalDate.of(2026, 8, 15)
         val nextDay = holiday.plusDays(1)
+        val mixedHolidayUseCase = useCase(day, night.copy(skipOnPublicHoliday = false))
         calendar.eventsByDate[holiday] = listOf(event(holiday, "주간"), event(holiday, "야간"))
         calendar.eventsByDate[nextDay] = listOf(event(nextDay, "야간"), event(nextDay, "주간"))
 
-        assertTrue(useCase.execute(holiday, nextDay, zone).isEmpty())
-        assertEquals("CONFLICT:1,2", previews.get(group.id)?.stateKey)
+        val change = mixedHolidayUseCase.execute(holiday, nextDay, zone).single()
+
+        assertEquals("MATCHED:2", change.previousKey)
+        assertEquals("CONFLICT:1:2:주간|2:2:야간", previews.get(group.id)?.stateKey)
     }
 
     @Test
@@ -178,7 +200,7 @@ class EvaluateNextDayShiftGroupsUseCaseTest {
         repository = Repository(group, types.toList()),
         events = calendar,
         previews = previews,
-        evaluator = ShiftDayEvaluator(),
+        effectiveEvaluator = EvaluateShiftGroupDayUseCase(ShiftDayEvaluator(), KoreanPublicHolidayProvider()),
         clock = Clock.fixed(Instant.parse("2026-08-23T13:00:00Z"), zone),
     )
 

@@ -28,14 +28,17 @@ class AlarmSchedulerImpl @Inject constructor(
     }
 
     override fun scheduleShift(shiftTypeId: Long, triggerAt: Instant): ScheduleResult =
-        scheduleShiftExact(shiftTypeId, triggerAt, snooze = false)
+        scheduleShiftExact(shiftTypeId, triggerAt, snooze = false, scheduledOccurrenceAt = triggerAt)
 
-    override fun scheduleShiftSnooze(shiftTypeId: Long, triggerAt: Instant): ScheduleResult =
-        scheduleShiftExact(shiftTypeId, triggerAt, snooze = true)
+    override fun scheduleShiftSnooze(
+        shiftTypeId: Long,
+        triggerAt: Instant,
+        scheduledOccurrenceAt: Instant,
+    ): ScheduleResult = scheduleShiftExact(shiftTypeId, triggerAt, snooze = true, scheduledOccurrenceAt)
 
     override fun cancelShift(shiftTypeId: Long) {
-        alarmManager.cancel(shiftPendingIntent(shiftTypeId, snooze = false))
-        alarmManager.cancel(shiftPendingIntent(shiftTypeId, snooze = true))
+        alarmManager.cancel(shiftPendingIntent(shiftTypeId, snooze = false, Instant.EPOCH))
+        alarmManager.cancel(shiftPendingIntent(shiftTypeId, snooze = true, Instant.EPOCH))
     }
 
     private fun scheduleExact(alarmId: Long, triggerAt: Instant, snooze: Boolean): ScheduleResult {
@@ -48,12 +51,17 @@ class AlarmSchedulerImpl @Inject constructor(
         return ScheduleResult.Scheduled
     }
 
-    private fun scheduleShiftExact(shiftTypeId: Long, triggerAt: Instant, snooze: Boolean): ScheduleResult {
+    private fun scheduleShiftExact(
+        shiftTypeId: Long,
+        triggerAt: Instant,
+        snooze: Boolean,
+        scheduledOccurrenceAt: Instant,
+    ): ScheduleResult {
         if (!permission.isGranted()) return ScheduleResult.ExactAlarmPermissionRequired
         alarmManager.setExactAndAllowWhileIdle(
             AlarmManager.RTC_WAKEUP,
             triggerAt.toEpochMilli(),
-            shiftPendingIntent(shiftTypeId, snooze),
+            shiftPendingIntent(shiftTypeId, snooze, scheduledOccurrenceAt),
         )
         return ScheduleResult.Scheduled
     }
@@ -73,11 +81,16 @@ class AlarmSchedulerImpl @Inject constructor(
         )
     }
 
-    private fun shiftPendingIntent(shiftTypeId: Long, snooze: Boolean): PendingIntent {
+    private fun shiftPendingIntent(
+        shiftTypeId: Long,
+        snooze: Boolean,
+        scheduledOccurrenceAt: Instant,
+    ): PendingIntent {
         val intent = Intent(ACTION_SHIFT_ALARM).apply {
             setPackage(context.packageName)
             putExtra(EXTRA_SHIFT_TYPE_ID, shiftTypeId)
             putExtra(EXTRA_IS_SNOOZE, snooze)
+            putExtra(EXTRA_SCHEDULED_OCCURRENCE_AT, scheduledOccurrenceAt.toEpochMilli())
         }
         val namespace = if (snooze) SHIFT_SNOOZE_REQUEST_OFFSET else SHIFT_REQUEST_OFFSET
         return PendingIntent.getBroadcast(
@@ -94,6 +107,7 @@ class AlarmSchedulerImpl @Inject constructor(
         const val EXTRA_ALARM_ID = "alarm_id"
         const val EXTRA_SHIFT_TYPE_ID = "shift_type_id"
         const val EXTRA_IS_SNOOZE = "is_snooze"
+        const val EXTRA_SCHEDULED_OCCURRENCE_AT = "scheduled_occurrence_at"
         private const val SNOOZE_REQUEST_OFFSET = 1_000_000
         private const val SHIFT_REQUEST_OFFSET = 2_000_000
         private const val SHIFT_SNOOZE_REQUEST_OFFSET = 3_000_000

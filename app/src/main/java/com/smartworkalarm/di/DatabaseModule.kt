@@ -61,7 +61,8 @@ val MIGRATION_4_5 = object : Migration(4, 5) {
                 "id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
                 "name TEXT NOT NULL, " +
                 "enabled INTEGER NOT NULL, " +
-                "emergency_shift_type_id INTEGER)",
+                "emergency_shift_type_id INTEGER, " +
+                "is_draft INTEGER NOT NULL DEFAULT 0)",
         )
         db.execSQL(
             "CREATE TABLE IF NOT EXISTS shift_type_alarms (" +

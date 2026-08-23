@@ -8,6 +8,7 @@ fun ShiftAlarmGroup.toEntity() = ShiftAlarmGroupEntity(
     name = name,
     enabled = enabled,
     emergencyShiftTypeId = emergencyShiftTypeId,
+    isDraft = isDraft,
 )
 
 fun ShiftAlarmGroupEntity.toDomain() = ShiftAlarmGroup(
@@ -15,6 +16,7 @@ fun ShiftAlarmGroupEntity.toDomain() = ShiftAlarmGroup(
     name = name,
     enabled = enabled,
     emergencyShiftTypeId = emergencyShiftTypeId,
+    isDraft = isDraft,
 )
 
 fun ShiftTypeAlarm.toEntity() = ShiftTypeAlarmEntity(

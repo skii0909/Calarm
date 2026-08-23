@@ -53,10 +53,16 @@ class ShiftAlarmExecutionCoordinator internal constructor(
         zoneId = zoneId,
     )
 
-    suspend fun execute(shiftTypeId: Long, isSnooze: Boolean, now: Instant): ExecutionOutcome {
+    suspend fun execute(
+        shiftTypeId: Long,
+        isSnooze: Boolean,
+        now: Instant,
+        scheduledOccurrenceAt: Instant = now,
+    ): ExecutionOutcome {
         val shiftType = repository.getShiftType(shiftTypeId) ?: return ExecutionOutcome.Ignored
         val group = repository.getGroupWithTypes(shiftType.groupId) ?: return ExecutionOutcome.Ignored
-        if (!group.group.enabled || !shiftType.enabled || !shiftType.repeatsOn(now.atZone(zoneId).dayOfWeek)) {
+        val occurrenceDate = scheduledOccurrenceAt.atZone(zoneId).toLocalDate()
+        if (!group.group.enabled || !shiftType.enabled || !shiftType.repeatsOn(occurrenceDate.dayOfWeek)) {
             return ExecutionOutcome.Ignored
         }
 
@@ -64,17 +70,17 @@ class ShiftAlarmExecutionCoordinator internal constructor(
             calculator.execute(shiftType.toAlarm(), now, zoneId)?.let { scheduler.scheduleShift(shiftType.id, it) }
         }
 
-        return when (val decision = decisionProvider(group, shiftType, now.atZone(zoneId).toLocalDate())) {
+        return when (val decision = decisionProvider(group, shiftType, occurrenceDate)) {
             ShiftExecutionDecision.SkipForVacation -> ExecutionOutcome.SkippedForVacation
-            is ShiftExecutionDecision.Effective -> outcomeFor(decision.value, shiftType)
+            is ShiftExecutionDecision.Effective -> outcomeFor(decision.value, shiftType, scheduledOccurrenceAt)
             is ShiftExecutionDecision.Evaluated -> when (val evaluation = decision.value) {
                 is ShiftDayEvaluation.Matched -> {
                     if (evaluation.shiftTypeId != shiftType.id) ExecutionOutcome.SkippedForShift
-                    else ring(shiftType, warning = false)
+                    else ring(shiftType, warning = false, scheduledOccurrenceAt)
                 }
                 ShiftDayEvaluation.ReadFailure -> {
                     if (group.group.emergencyShiftTypeId != shiftType.id) ExecutionOutcome.SkippedForShift
-                    else ring(shiftType, warning = true)
+                    else ring(shiftType, warning = true, scheduledOccurrenceAt)
                 }
                 ShiftDayEvaluation.None,
                 is ShiftDayEvaluation.Conflict,
@@ -83,23 +89,33 @@ class ShiftAlarmExecutionCoordinator internal constructor(
         }
     }
 
-    private fun outcomeFor(status: ShiftGroupDayStatus, shiftType: ShiftTypeAlarm): ExecutionOutcome = when (status) {
+    private fun outcomeFor(
+        status: ShiftGroupDayStatus,
+        shiftType: ShiftTypeAlarm,
+        scheduledOccurrenceAt: Instant,
+    ): ExecutionOutcome = when (status) {
         ShiftGroupDayStatus.Inactive -> ExecutionOutcome.Ignored
         ShiftGroupDayStatus.Vacation,
         ShiftGroupDayStatus.PublicHoliday,
         -> ExecutionOutcome.SkippedForVacation
         is ShiftGroupDayStatus.Matched -> {
-            if (status.shiftType.id != shiftType.id) ExecutionOutcome.SkippedForShift else ring(shiftType, warning = false)
+            if (status.shiftType.id != shiftType.id) ExecutionOutcome.SkippedForShift
+            else ring(shiftType, warning = false, scheduledOccurrenceAt)
         }
         ShiftGroupDayStatus.None,
         is ShiftGroupDayStatus.Conflict,
         -> ExecutionOutcome.SkippedForShift
         is ShiftGroupDayStatus.ReadFailure -> {
-            if (status.emergencyType?.id != shiftType.id) ExecutionOutcome.SkippedForShift else ring(shiftType, warning = true)
+            if (status.emergencyType?.id != shiftType.id) ExecutionOutcome.SkippedForShift
+            else ring(shiftType, warning = true, scheduledOccurrenceAt)
         }
     }
 
-    private fun ring(shiftType: ShiftTypeAlarm, warning: Boolean): ExecutionOutcome {
+    private fun ring(
+        shiftType: ShiftTypeAlarm,
+        warning: Boolean,
+        scheduledOccurrenceAt: Instant,
+    ): ExecutionOutcome {
         ringer.startShift(
             shiftType.id,
             shiftType.name,
@@ -107,6 +123,7 @@ class ShiftAlarmExecutionCoordinator internal constructor(
             shiftType.gradualVolume,
             shiftType.snoozeMinutes,
             warning,
+            scheduledOccurrenceAt,
         )
         return if (warning) ExecutionOutcome.RingingWithCalendarWarning else ExecutionOutcome.Ringing
     }

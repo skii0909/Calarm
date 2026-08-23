@@ -92,7 +92,11 @@ class RescheduleAlarmsUseCaseTest {
             ids += shiftTypeId
             return ScheduleResult.Scheduled
         }
-        override fun scheduleShiftSnooze(shiftTypeId: Long, triggerAt: Instant): ScheduleResult = ScheduleResult.Scheduled
+        override fun scheduleShiftSnooze(
+            shiftTypeId: Long,
+            triggerAt: Instant,
+            scheduledOccurrenceAt: Instant,
+        ): ScheduleResult = ScheduleResult.Scheduled
         override fun cancelShift(shiftTypeId: Long) = Unit
     }
 }

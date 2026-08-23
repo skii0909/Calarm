@@ -4,13 +4,23 @@ import android.content.Context
 import android.content.Intent
 import androidx.core.content.ContextCompat
 import dagger.hilt.android.qualifiers.ApplicationContext
+import java.time.Instant
 import javax.inject.Inject
 
 class AlarmRingerImpl @Inject constructor(
     @param:ApplicationContext private val context: Context,
 ) : AlarmRinger {
     override fun start(alarmId: Long, alarmName: String, ringtoneUri: String?, gradualVolume: Boolean, snoozeMinutes: Int) {
-        startService(alarmId, alarmName, ringtoneUri, gradualVolume, snoozeMinutes, isShiftAlarm = false, calendarWarning = false)
+        startService(
+            alarmId,
+            alarmName,
+            ringtoneUri,
+            gradualVolume,
+            snoozeMinutes,
+            isShiftAlarm = false,
+            calendarWarning = false,
+            scheduledOccurrenceAt = null,
+        )
     }
 
     override fun startShift(
@@ -20,8 +30,18 @@ class AlarmRingerImpl @Inject constructor(
         gradualVolume: Boolean,
         snoozeMinutes: Int,
         calendarWarning: Boolean,
+        scheduledOccurrenceAt: Instant,
     ) {
-        startService(shiftTypeId, alarmName, ringtoneUri, gradualVolume, snoozeMinutes, isShiftAlarm = true, calendarWarning)
+        startService(
+            shiftTypeId,
+            alarmName,
+            ringtoneUri,
+            gradualVolume,
+            snoozeMinutes,
+            isShiftAlarm = true,
+            calendarWarning,
+            scheduledOccurrenceAt,
+        )
     }
 
     private fun startService(
@@ -32,6 +52,7 @@ class AlarmRingerImpl @Inject constructor(
         snoozeMinutes: Int,
         isShiftAlarm: Boolean,
         calendarWarning: Boolean,
+        scheduledOccurrenceAt: Instant?,
     ) {
         ContextCompat.startForegroundService(
             context,
@@ -44,6 +65,9 @@ class AlarmRingerImpl @Inject constructor(
                 putExtra(AlarmRingingService.EXTRA_SNOOZE_MINUTES, snoozeMinutes.coerceIn(5, 30))
                 putExtra(AlarmRingingService.EXTRA_IS_SHIFT_ALARM, isShiftAlarm)
                 putExtra(AlarmRingingService.EXTRA_CALENDAR_WARNING, calendarWarning)
+                scheduledOccurrenceAt?.let {
+                    putExtra(AlarmSchedulerImpl.EXTRA_SCHEDULED_OCCURRENCE_AT, it.toEpochMilli())
+                }
             },
         )
     }

@@ -17,7 +17,7 @@ data class ShiftGroupWithTypes(
 @Dao
 interface ShiftAlarmDao {
     @Transaction
-    @Query("SELECT * FROM shift_alarm_groups ORDER BY id")
+    @Query("SELECT * FROM shift_alarm_groups WHERE is_draft = 0 ORDER BY id")
     fun observeGroupsWithTypes(): Flow<List<ShiftGroupWithTypes>>
 
     @Transaction
@@ -25,7 +25,7 @@ interface ShiftAlarmDao {
     suspend fun getGroupWithTypes(groupId: Long): ShiftGroupWithTypes?
 
     @Transaction
-    @Query("SELECT * FROM shift_alarm_groups ORDER BY id")
+    @Query("SELECT * FROM shift_alarm_groups WHERE is_draft = 0 ORDER BY id")
     suspend fun getEnabledGroupsWithTypes(): List<ShiftGroupWithTypes>
 
     @Query("SELECT * FROM shift_type_alarms WHERE id = :shiftTypeId")

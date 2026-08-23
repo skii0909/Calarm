@@ -10,6 +10,7 @@ sealed interface ShiftDayEvaluation {
 
     data class Conflict(
         val matches: List<Matched>,
+        val matchedCalendarTitles: Map<Long, List<String>> = emptyMap(),
     ) : ShiftDayEvaluation
 
     data object ReadFailure : ShiftDayEvaluation

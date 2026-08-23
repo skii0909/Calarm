@@ -3,9 +3,11 @@ package com.smartworkalarm.presentation.shift
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.smartworkalarm.domain.model.RepeatDay
+import com.smartworkalarm.domain.model.CalendarConnectionState
 import com.smartworkalarm.domain.model.ShiftAlarmGroup
 import com.smartworkalarm.domain.model.ShiftTypeAlarm
 import com.smartworkalarm.domain.repository.CalendarEventSource
+import com.smartworkalarm.domain.repository.CalendarConnectionRepository
 import com.smartworkalarm.domain.repository.ShiftAlarmRepository
 import com.smartworkalarm.domain.shift.EvaluateShiftGroupDayUseCase
 import com.smartworkalarm.domain.shift.ShiftGroupDayStatus
@@ -25,9 +27,13 @@ data class ShiftGroupEditState(
     val id: Long = 0,
     val name: String = "",
     val enabled: Boolean = true,
+    val isDraft: Boolean = false,
     val emergencyShiftTypeId: Long? = null,
     val shiftTypes: List<ShiftTypeAlarm> = emptyList(),
     val todayStatus: ShiftGroupDayStatus? = null,
+    val tomorrowStatus: ShiftGroupDayStatus? = null,
+    val calendarConnection: CalendarConnectionState = CalendarConnectionState(false, emptyList()),
+    val lastCalendarQuery: CalendarQueryStatus? = null,
     val nameError: String? = null,
     val shiftTypesError: String? = null,
     val aliasesError: String? = null,
@@ -65,6 +71,7 @@ class ShiftGroupEditViewModel @Inject constructor(
     private val evaluator: EvaluateShiftGroupDayUseCase,
     private val clock: Clock,
     private val zoneId: ZoneId,
+    private val connectionRepository: CalendarConnectionRepository,
 ) : ViewModel() {
     private val _state = MutableStateFlow(ShiftGroupEditState())
     val state: StateFlow<ShiftGroupEditState> = _state.asStateFlow()
@@ -80,13 +87,18 @@ class ShiftGroupEditViewModel @Inject constructor(
         }
         viewModelScope.launch {
             val aggregate = repository.getGroupWithTypes(groupId) ?: return@launch
+            val calendarState = evaluateCalendar(aggregate)
             _state.value = ShiftGroupEditState(
                 id = aggregate.group.id,
                 name = aggregate.group.name,
                 enabled = aggregate.group.enabled,
+                isDraft = aggregate.group.isDraft,
                 emergencyShiftTypeId = aggregate.group.emergencyShiftTypeId,
                 shiftTypes = aggregate.shiftTypes,
-                todayStatus = evaluateToday(aggregate),
+                todayStatus = calendarState.today,
+                tomorrowStatus = calendarState.tomorrow,
+                calendarConnection = connectionRepository.getState(),
+                lastCalendarQuery = calendarState.queryStatus,
             )
         }
     }
@@ -107,8 +119,12 @@ class ShiftGroupEditViewModel @Inject constructor(
             current.emergencyShiftTypeId !in current.shiftTypes.map { it.id } ->
                 _state.update { it.copy(emergencyError = "비상 기본 알람을 선택하세요") }
             else -> viewModelScope.launch {
-                val savedId = reconcileShiftAlarms.saveGroup(current.toGroup(name = current.name.trim()))
-                _state.update { it.copy(id = if (it.id == 0L) savedId else it.id, name = it.name.trim(), saved = true) }
+                val savedId = reconcileShiftAlarms.saveGroup(
+                    current.toGroup(name = current.name.trim()).copy(isDraft = false),
+                )
+                _state.update {
+                    it.copy(id = if (it.id == 0L) savedId else it.id, name = it.name.trim(), isDraft = false, saved = true)
+                }
             }
         }
     }
@@ -127,8 +143,10 @@ class ShiftGroupEditViewModel @Inject constructor(
         draftCreationInProgress = true
         viewModelScope.launch {
             try {
-                val id = repository.upsertGroup(current.toGroup(name = current.name.trim()).copy(enabled = false))
-                _state.update { it.copy(id = id, name = it.name.trim()) }
+                val id = repository.upsertGroup(
+                    current.toGroup(name = current.name.trim()).copy(isDraft = true),
+                )
+                _state.update { it.copy(id = id, name = it.name.trim(), isDraft = true) }
                 onReady(id)
             } finally {
                 draftCreationInProgress = false
@@ -142,6 +160,12 @@ class ShiftGroupEditViewModel @Inject constructor(
         _state.update { it.copy(deleted = true) }
     }
 
+    fun cancelDraft() = viewModelScope.launch {
+        val current = _state.value
+        if (current.id != 0L && current.isDraft) reconcileShiftAlarms.deleteGroup(current.id)
+        _state.update { it.copy(deleted = true) }
+    }
+
     fun loadShiftType(groupId: Long, shiftTypeId: Long) {
         viewModelScope.launch {
             val aggregate = repository.getGroupWithTypes(groupId) ?: return@launch
@@ -149,6 +173,7 @@ class ShiftGroupEditViewModel @Inject constructor(
                 id = aggregate.group.id,
                 name = aggregate.group.name,
                 enabled = aggregate.group.enabled,
+                isDraft = aggregate.group.isDraft,
                 emergencyShiftTypeId = aggregate.group.emergencyShiftTypeId,
                 shiftTypes = aggregate.shiftTypes,
             )
@@ -204,11 +229,23 @@ class ShiftGroupEditViewModel @Inject constructor(
         _shiftTypeState.update { it.copy(deleted = true) }
     }
 
-    private suspend fun evaluateToday(aggregate: ShiftAlarmRepository.GroupWithTypes): ShiftGroupDayStatus {
-        val date = clock.instant().atZone(zoneId).toLocalDate()
-        val start = date.atStartOfDay(zoneId).toInstant()
-        val end = date.plusDays(1).atStartOfDay(zoneId).toInstant()
-        return evaluator.execute(aggregate, date, calendarEventSource.getEventsOverlapping(start, end))
+    private suspend fun evaluateCalendar(aggregate: ShiftAlarmRepository.GroupWithTypes): GroupCalendarState {
+        val queriedAt = clock.instant()
+        val today = queriedAt.atZone(zoneId).toLocalDate()
+        val tomorrow = today.plusDays(1)
+        val todayEvents = calendarEventSource.getEventsOverlapping(
+            today.atStartOfDay(zoneId).toInstant(),
+            tomorrow.atStartOfDay(zoneId).toInstant(),
+        )
+        val tomorrowEvents = calendarEventSource.getEventsOverlapping(
+            tomorrow.atStartOfDay(zoneId).toInstant(),
+            tomorrow.plusDays(1).atStartOfDay(zoneId).toInstant(),
+        )
+        return GroupCalendarState(
+            today = evaluator.execute(aggregate, today, todayEvents),
+            tomorrow = evaluator.execute(aggregate, tomorrow, tomorrowEvents),
+            queryStatus = CalendarQueryStatus(queriedAt, todayEvents.isSuccess && tomorrowEvents.isSuccess),
+        )
     }
 
     private fun duplicateAliasInOtherType(typeId: Long, aliases: List<String>): String? {
@@ -225,6 +262,7 @@ class ShiftGroupEditViewModel @Inject constructor(
         name = name,
         enabled = enabled,
         emergencyShiftTypeId = emergencyShiftTypeId,
+        isDraft = isDraft,
     )
 
     private fun ShiftTypeEditState.toShiftType(aliases: List<String>) = ShiftTypeAlarm(
@@ -257,6 +295,12 @@ class ShiftGroupEditViewModel @Inject constructor(
         skipOnPublicHoliday = skipOnPublicHoliday,
     )
 }
+
+private data class GroupCalendarState(
+    val today: ShiftGroupDayStatus,
+    val tomorrow: ShiftGroupDayStatus,
+    val queryStatus: CalendarQueryStatus,
+)
 
 private fun hasDuplicateAliases(types: List<ShiftTypeAlarm>): Boolean {
     val aliases = types.flatMap { it.exactTitles }.map(::aliasKey)
