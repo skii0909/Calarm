@@ -25,6 +25,8 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TimePicker
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -33,6 +35,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -40,6 +43,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import com.smartworkalarm.domain.model.RepeatDay
 import com.smartworkalarm.sound.RecommendedSoundCatalog
+import com.smartworkalarm.sound.AndroidSoundPreviewEngine
+import com.smartworkalarm.sound.SoundPreviewController
 
 @Composable
 fun AlarmEditScreen(viewModel: AlarmEditViewModel, alarmId: Long, onDone: () -> Unit) {
@@ -58,6 +63,7 @@ fun AlarmEditScreen(viewModel: AlarmEditViewModel, alarmId: Long, onDone: () -> 
             isError = state.nameError != null,
             supportingText = { state.nameError?.let { Text(it) } },
             modifier = Modifier.fillMaxWidth(),
+            colors = readableTextFieldColors(),
         )
         AlarmTimePickerField(state.hour, state.minute, viewModel::onTimeChanged)
         Text("반복 요일")
@@ -67,6 +73,20 @@ fun AlarmEditScreen(viewModel: AlarmEditViewModel, alarmId: Long, onDone: () -> 
                     selected = state.repeatDaysMask and day.bit != 0,
                     onClick = { viewModel.toggleDay(day) },
                     label = { Text(dayLabel(day)) },
+                    colors = FilterChipDefaults.filterChipColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                        labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                        selectedContainerColor = MaterialTheme.colorScheme.primary,
+                        selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
+                    ),
+                    border = FilterChipDefaults.filterChipBorder(
+                        enabled = true,
+                        selected = state.repeatDaysMask and day.bit != 0,
+                        borderColor = MaterialTheme.colorScheme.outline,
+                        selectedBorderColor = MaterialTheme.colorScheme.primary,
+                        borderWidth = 1.dp,
+                        selectedBorderWidth = 2.dp,
+                    ),
                 )
             }
         }
@@ -81,6 +101,7 @@ fun AlarmEditScreen(viewModel: AlarmEditViewModel, alarmId: Long, onDone: () -> 
             placeholder = { Text("휴가, 연차, 병가") },
             supportingText = { Text("여러 키워드는 쉼표(,)로 구분하세요. 일정 제목에 키워드가 하나라도 포함되면 이 알람을 건너뜁니다.") },
             modifier = Modifier.fillMaxWidth(),
+            colors = readableTextFieldColors(),
         )
         SettingSwitch("공휴일 자동 끄기", state.skipOnPublicHoliday, viewModel::onSkipOnPublicHolidayChanged)
         Text("대한민국 법정공휴일(2026~2031)에는 이 알람만 건너뜁니다.", style = MaterialTheme.typography.bodySmall)
@@ -126,6 +147,8 @@ private fun AlarmRingtonePickerField(ringtoneUri: String?, onSelected: (String?)
         }
     }
     var showRecommended by remember { mutableStateOf(false) }
+    val preview = remember(context) { SoundPreviewController(AndroidSoundPreviewEngine(context)) }
+    DisposableEffect(preview) { onDispose { preview.stop() } }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text("알람음")
         OutlinedButton(onClick = { showRecommended = true }, modifier = Modifier.fillMaxWidth()) {
@@ -145,26 +168,40 @@ private fun AlarmRingtonePickerField(ringtoneUri: String?, onSelected: (String?)
     }
     if (showRecommended) {
         AlertDialog(
-            onDismissRequest = { showRecommended = false },
+            onDismissRequest = { preview.stop(); showRecommended = false },
             title = { Text("추천 벨소리") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text("앱에서 직접 만든 저작권 안전 사운드입니다.", style = MaterialTheme.typography.bodySmall)
                     RecommendedSoundCatalog.all.forEach { sound ->
-                        TextButton(
-                            onClick = {
+                        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            TextButton(onClick = { preview.preview(sound.uri) }, modifier = Modifier.weight(1f)) {
+                                Text("▶ ${sound.title} · ${sound.description}")
+                            }
+                            TextButton(onClick = {
+                                preview.stop()
                                 onSelected(sound.uri)
                                 showRecommended = false
-                            },
-                            modifier = Modifier.fillMaxWidth(),
-                        ) { Text("${sound.title} · ${sound.description}") }
+                            }) { Text("선택") }
+                        }
                     }
                 }
             },
-            confirmButton = { TextButton(onClick = { showRecommended = false }) { Text("닫기") } },
+            confirmButton = { TextButton(onClick = { preview.stop(); showRecommended = false }) { Text("닫기") } },
         )
     }
 }
+
+@Composable
+private fun readableTextFieldColors() = OutlinedTextFieldDefaults.colors(
+    focusedTextColor = MaterialTheme.colorScheme.onSurface,
+    unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+    focusedLabelColor = MaterialTheme.colorScheme.secondary,
+    unfocusedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+    cursorColor = MaterialTheme.colorScheme.secondary,
+    focusedBorderColor = MaterialTheme.colorScheme.secondary,
+    unfocusedBorderColor = MaterialTheme.colorScheme.outline,
+)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

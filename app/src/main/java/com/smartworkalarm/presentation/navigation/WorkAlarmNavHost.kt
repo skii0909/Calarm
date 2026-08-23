@@ -19,6 +19,10 @@ import com.smartworkalarm.presentation.settings.SettingsScreen
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.collectAsState
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.ui.Modifier
 
 @Composable
 fun WorkAlarmNavHost() {
@@ -29,6 +33,7 @@ fun WorkAlarmNavHost() {
     val connectionState by connectionViewModel.state.collectAsState()
     val entry by navController.currentBackStackEntryAsState()
     LaunchedEffect(entry?.destination?.route) { connectionViewModel.refresh() }
+    Box(Modifier.fillMaxSize().safeDrawingPadding()) {
     CalendarConnectionPrompt(connectionState, connectionViewModel::refresh)
     NavHost(navController = navController, startDestination = start) {
         composable(ONBOARDING) {
@@ -58,6 +63,7 @@ fun WorkAlarmNavHost() {
         composable(SETTINGS) {
             SettingsScreen(connectionState) { navController.popBackStack() }
         }
+    }
     }
 }
 
