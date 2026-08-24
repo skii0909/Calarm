@@ -15,7 +15,7 @@ import com.smartworkalarm.presentation.onboarding.OnboardingPreferences
 import com.smartworkalarm.presentation.onboarding.OnboardingScreen
 import com.smartworkalarm.presentation.calendar.CalendarConnectionPrompt
 import com.smartworkalarm.presentation.calendar.CalendarConnectionViewModel
-import com.smartworkalarm.presentation.settings.SettingsScreen
+import com.smartworkalarm.presentation.settings.SettingsRoute
 import com.smartworkalarm.presentation.shift.ShiftGroupScreen
 import com.smartworkalarm.presentation.shift.ShiftTypeEditScreen
 import androidx.compose.runtime.LaunchedEffect
@@ -36,7 +36,13 @@ fun WorkAlarmNavHost(requiredPermissionsMissing: Boolean = false) {
     val entry by navController.currentBackStackEntryAsState()
     LaunchedEffect(entry?.destination?.route) { connectionViewModel.refresh() }
     Box(Modifier.fillMaxSize().safeDrawingPadding()) {
-    CalendarConnectionPrompt(connectionState, requiredPermissionsMissing)
+    CalendarConnectionPrompt(
+        state = connectionState,
+        requiredPermissionsMissing = requiredPermissionsMissing,
+        onOpenSettings = {
+            if (entry?.destination?.route != SETTINGS) navController.navigate(SETTINGS)
+        },
+    )
     NavHost(navController = navController, startDestination = start) {
         composable(ONBOARDING) {
             OnboardingScreen {
@@ -66,7 +72,7 @@ fun WorkAlarmNavHost(requiredPermissionsMissing: Boolean = false) {
             )
         }
         composable(SETTINGS) {
-            SettingsScreen(connectionState) { navController.popBackStack() }
+            SettingsRoute(onBack = { navController.popBackStack() })
         }
         composable(
             route = "shift-group/{groupId}",

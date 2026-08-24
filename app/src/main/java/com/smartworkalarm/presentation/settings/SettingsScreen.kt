@@ -1,65 +1,282 @@
 package com.smartworkalarm.presentation.settings
 
-import android.content.Intent
-import android.net.Uri
-import android.provider.Settings
-import android.os.Build
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TriStateCheckbox
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.state.ToggleableState
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.smartworkalarm.domain.model.CalendarConnectionState
-import com.smartworkalarm.alarm.FullScreenAlarmAccess
+import com.smartworkalarm.permissions.RequiredPermission
+import com.smartworkalarm.presentation.components.FeaturePill
+import com.smartworkalarm.presentation.components.GradientHero
+import com.smartworkalarm.presentation.components.NightPulseSection
 
 @Composable
-fun SettingsScreen(state: CalendarConnectionState?, onBack: () -> Unit) {
-    val context = LocalContext.current
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text("설정", style = MaterialTheme.typography.headlineMedium)
-        Text("캘린더 연결", style = MaterialTheme.typography.titleLarge)
-        Text(if (state?.isConnected == true) "연결됨" else "연결된 Google 캘린더 없음")
-        state?.calendars?.forEach { Text("• ${it.displayName}") }
-        Button(
-            onClick = { context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${context.packageName}"))) },
-            modifier = Modifier.fillMaxWidth(),
-        ) { Text("캘린더 연결/권한 설정") }
-        Text("Outlook Calendar — 준비 중")
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            Text("잠금화면 알람", style = MaterialTheme.typography.titleLarge)
-            Text(if (FullScreenAlarmAccess.canUse(context)) "전체화면 알람 허용됨" else "전체화면 알람 허용이 필요합니다")
-            Button(
-                onClick = { context.startActivity(FullScreenAlarmAccess.settingsIntent(context)) },
+fun SettingsScreen(
+    state: SettingsUiState,
+    permissions: List<PermissionUiState>,
+    onRequestRuntimePermission: (RequiredPermission) -> Unit,
+    onOpenPermissionSettings: (RequiredPermission) -> Unit,
+    onSetCalendarSelected: (Long, Boolean) -> Unit,
+    onSetAccountSelected: (String, Boolean) -> Unit,
+    onBack: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(20.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        GradientHero {
+            Row(
                 modifier = Modifier.fillMaxWidth(),
-            ) { Text("잠금화면 알람 설정") }
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        "설정과 도움말",
+                        style = MaterialTheme.typography.headlineSmall,
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Text(
+                        "권한과 캘린더를 확인하고 알람 동작을 알아보세요.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color.White.copy(alpha = .88f),
+                    )
+                }
+                TextButton(onClick = onBack) { Text("돌아가기", color = Color.White) }
+            }
         }
-        Text("사용법/도움말", style = MaterialTheme.typography.titleLarge)
-        Text("• 알람을 여러 개 만들고 각각 시간과 반복 요일을 지정할 수 있습니다.")
-        Text("• 캘린더 건너뛰기는 설정한 알람에만 적용됩니다.")
-        Text("• 여러 키워드는 쉼표(,)로 구분하세요.")
-        Text("• 일정 제목에 키워드가 하나라도 포함되면 해당 날짜의 알람을 건너뜁니다.")
-        Text("• 매일 22시에 다음 날 알람 상태 변화를 한 번 알려드립니다.")
-        Text("• 22시 이후에는 추가 안내 없이 실제 알람 시각에 캘린더를 최종 확인합니다.")
-        Text("• 캘린더 조회에 실패하면 안전하게 알람이 울립니다.")
-        Text("• 교대 알람 그룹은 캘린더 제목 전체가 등록한 별칭과 정확히 같을 때만 선택됩니다. 예: `야간`은 `야간`과 일치하지만 `야간 근무 후 회식`에는 적용되지 않습니다.")
-        Text("• 교대 그룹 안에서는 제목 별칭 일부가 겹치는 근무 형태를 저장할 수 없습니다. 중복된 별칭을 고쳐 저장하세요.")
-        Text("• 내일 캘린더에 등록한 근무 형태가 없으면 해당 교대 그룹 알람은 울리지 않으며, 일반 알람에는 영향을 주지 않습니다.")
-        Text("• 같은 날짜에 서로 다른 근무 형태가 함께 있으면 충돌로 판단해 해당 교대 그룹 알람은 울리지 않습니다. 캘린더 일정을 확인하세요.")
-        Text("• 교대 근무를 조회하지 못하면 지정한 비상 기본 근무 형태 알람만 울립니다. 비상 기본 알람이 없으면 교대 그룹 알람은 울리지 않습니다.")
-        Text("• 교대 근무가 바뀌거나 근무 없음·충돌 상태가 새로 생긴 경우에만 22시에 안내합니다. 같은 상태가 이어지면 반복 안내하지 않습니다.")
-        Text("• 공휴일 자동 끄기는 알람별로 선택하며, 대한민국 공휴일 2026~2031년을 지원합니다.")
-        Text("• 임시공휴일은 연결된 휴대폰 캘린더 정보로 보완합니다.")
-        Text("• 추천 벨소리는 외부 서버나 다운로드 없이 앱에 포함된 자체 제작 음원입니다.")
-        Text("• 다시 울림은 알람마다 5~30분으로 설정할 수 있습니다.")
-        Button(onClick = onBack, modifier = Modifier.fillMaxWidth()) { Text("돌아가기") }
+
+        PermissionCard(
+            permissions = permissions,
+            onRequestRuntimePermission = onRequestRuntimePermission,
+            onOpenPermissionSettings = onOpenPermissionSettings,
+        )
+        CalendarCard(
+            state = state,
+            onSetCalendarSelected = onSetCalendarSelected,
+            onSetAccountSelected = onSetAccountSelected,
+        )
+        HELP_SECTIONS.forEach { help ->
+            ExpandableHelpCard(help)
+        }
+        Spacer(Modifier.size(8.dp))
     }
 }
+
+@Composable
+private fun PermissionCard(
+    permissions: List<PermissionUiState>,
+    onRequestRuntimePermission: (RequiredPermission) -> Unit,
+    onOpenPermissionSettings: (RequiredPermission) -> Unit,
+) {
+    NightPulseSection(
+        title = "연결 및 권한",
+        subtitle = "알람 실행에 필요한 권한을 한곳에서 확인합니다.",
+    ) {
+        if (permissions.all { it.granted }) {
+            FeaturePill("알람 실행 준비 완료")
+        }
+        permissions.forEachIndexed { index, permission ->
+            if (index > 0) HorizontalDivider()
+            PermissionRow(
+                permission = permission,
+                onClick = {
+                    if (!permission.granted && permission.permission.isRuntimePermission) {
+                        onRequestRuntimePermission(permission.permission)
+                    } else {
+                        onOpenPermissionSettings(permission.permission)
+                    }
+                },
+            )
+        }
+    }
+}
+
+@Composable
+private fun PermissionRow(
+    permission: PermissionUiState,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Text(permission.permission.label, style = MaterialTheme.typography.bodyLarge)
+            Text(
+                if (permission.granted) "허용됨" else "필요",
+                style = MaterialTheme.typography.labelMedium,
+                color = if (permission.granted) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+            )
+        }
+        TextButton(onClick = onClick) {
+            Text(if (!permission.granted && permission.permission.isRuntimePermission) "허용하기" else "설정")
+        }
+    }
+}
+
+@Composable
+private fun CalendarCard(
+    state: SettingsUiState,
+    onSetCalendarSelected: (Long, Boolean) -> Unit,
+    onSetAccountSelected: (String, Boolean) -> Unit,
+) {
+    val expandedAccounts = remember { mutableStateMapOf<String, Boolean>() }
+    NightPulseSection(
+        title = "사용 중인 캘린더",
+        subtitle = "알람 판단에 사용할 Google 캘린더를 선택합니다.",
+    ) {
+        CatalogStatus(state.catalogStatus)
+        state.accounts.forEach { account ->
+            val expanded = expandedAccounts[account.key] == true
+            CalendarAccount(
+                account = account,
+                expanded = expanded,
+                onExpandedChange = { expandedAccounts[account.key] = !expanded },
+                onSetCalendarSelected = onSetCalendarSelected,
+                onSetAccountSelected = onSetAccountSelected,
+            )
+        }
+        HorizontalDivider()
+        Text(
+            "Outlook — 준비 중",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+@Composable
+private fun CatalogStatus(status: CalendarCatalogStatus) {
+    when (status) {
+        CalendarCatalogStatus.LOADING -> Row(verticalAlignment = Alignment.CenterVertically) {
+            CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+            Spacer(Modifier.width(10.dp))
+            Text("캘린더를 불러오는 중입니다.")
+        }
+
+        CalendarCatalogStatus.PERMISSION_REQUIRED -> Text("캘린더 읽기 권한을 허용해 주세요.")
+        CalendarCatalogStatus.PROVIDER_QUERY_FAILED -> Text(
+            "캘린더 목록을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.",
+            color = MaterialTheme.colorScheme.error,
+        )
+
+        CalendarCatalogStatus.NO_GOOGLE_CALENDARS -> Text("동기화된 Google 캘린더가 없습니다.")
+        CalendarCatalogStatus.ZERO_SELECTED_CALENDARS -> Text(
+            "선택된 캘린더가 없어 현재 연결되지 않은 상태입니다.",
+            color = MaterialTheme.colorScheme.error,
+        )
+
+        CalendarCatalogStatus.READY -> Unit
+    }
+}
+
+@Composable
+private fun CalendarAccount(
+    account: CalendarAccountUiState,
+    expanded: Boolean,
+    onExpandedChange: () -> Unit,
+    onSetCalendarSelected: (Long, Boolean) -> Unit,
+    onSetAccountSelected: (String, Boolean) -> Unit,
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(18.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = .55f),
+    ) {
+        Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                TriStateCheckbox(
+                    state = when (account.selection) {
+                        AccountSelection.NONE -> ToggleableState.Off
+                        AccountSelection.PARTIAL -> ToggleableState.Indeterminate
+                        AccountSelection.ALL -> ToggleableState.On
+                    },
+                    onClick = {
+                        onSetAccountSelected(account.key, account.selection != AccountSelection.ALL)
+                    },
+                    modifier = Modifier.semantics {
+                        contentDescription = "${account.displayName} 전체 선택"
+                    },
+                )
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clickable(onClick = onExpandedChange)
+                        .padding(vertical = 8.dp),
+                ) {
+                    Text(account.displayName, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        "${account.selectedCount}/${account.totalCount} 선택",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                IconButton(
+                    onClick = onExpandedChange,
+                    modifier = Modifier.semantics {
+                        contentDescription = "${account.displayName} ${if (expanded) "접기" else "펼치기"}"
+                    },
+                ) { Text(if (expanded) "−" else "+") }
+            }
+            if (expanded) {
+                HorizontalDivider(Modifier.padding(bottom = 4.dp))
+                account.calendars.forEach { calendar ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Checkbox(
+                            checked = calendar.selected,
+                            onCheckedChange = { onSetCalendarSelected(calendar.id, it) },
+                            modifier = Modifier.semantics {
+                                contentDescription = "${calendar.displayName} ${if (calendar.selected) "선택됨" else "선택 안 됨"}"
+                            },
+                        )
+                        Text(calendar.displayName, style = MaterialTheme.typography.bodyMedium)
+                    }
+                }
+            }
+        }
+    }
+}
+
+private val RequiredPermission.label: String
+    get() = when (this) {
+        RequiredPermission.CALENDAR -> "캘린더 읽기"
+        RequiredPermission.NOTIFICATIONS -> "알림"
+        RequiredPermission.EXACT_ALARM -> "정확한 알람"
+        RequiredPermission.FULL_SCREEN_ALARM -> "전체화면 알람"
+    }
