@@ -15,8 +15,11 @@ import androidx.compose.ui.platform.LocalContext
 import com.smartworkalarm.domain.model.CalendarConnectionState
 
 @Composable
-fun CalendarConnectionPrompt(state: CalendarConnectionState?, refresh: () -> Unit) {
-    if (state == null || state.isConnected || !state.permissionGranted) return
+fun CalendarConnectionPrompt(
+    state: CalendarConnectionState?,
+    requiredPermissionsMissing: Boolean,
+) {
+    if (!shouldShowCalendarConnectionPrompt(state, requiredPermissionsMissing)) return
     var dismissed by remember(state) { mutableStateOf(false) }
     if (dismissed) return
     val context = LocalContext.current
@@ -35,3 +38,11 @@ fun CalendarConnectionPrompt(state: CalendarConnectionState?, refresh: () -> Uni
         },
     )
 }
+
+internal fun shouldShowCalendarConnectionPrompt(
+    state: CalendarConnectionState?,
+    requiredPermissionsMissing: Boolean,
+): Boolean = state != null &&
+    !state.isConnected &&
+    state.permissionGranted &&
+    !requiredPermissionsMissing

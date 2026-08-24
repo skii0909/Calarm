@@ -27,7 +27,7 @@ import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.ui.Modifier
 
 @Composable
-fun WorkAlarmNavHost() {
+fun WorkAlarmNavHost(requiredPermissionsMissing: Boolean = false) {
     val navController = rememberNavController()
     val preferences = OnboardingPreferences(LocalContext.current)
     val start = if (preferences.isComplete()) ALARMS else ONBOARDING
@@ -36,7 +36,7 @@ fun WorkAlarmNavHost() {
     val entry by navController.currentBackStackEntryAsState()
     LaunchedEffect(entry?.destination?.route) { connectionViewModel.refresh() }
     Box(Modifier.fillMaxSize().safeDrawingPadding()) {
-    CalendarConnectionPrompt(connectionState, connectionViewModel::refresh)
+    CalendarConnectionPrompt(connectionState, requiredPermissionsMissing)
     NavHost(navController = navController, startDestination = start) {
         composable(ONBOARDING) {
             OnboardingScreen {

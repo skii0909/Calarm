@@ -25,6 +25,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         requiredPermissions = RequiredPermissionsController(this)
+        refreshRequiredPermissions()
         setContent {
             val calendarPermission = rememberLauncherForActivityResult(
                 ActivityResultContracts.RequestPermission(),
@@ -33,7 +34,7 @@ class MainActivity : ComponentActivity() {
                 ActivityResultContracts.RequestPermission(),
             ) { refreshRequiredPermissions() }
             WorkAlarmTheme {
-                WorkAlarmNavHost()
+                WorkAlarmNavHost(requiredPermissionsMissing = missingPermissions.isNotEmpty())
                 if (!permissionsPromptDismissed) {
                     RequiredPermissionsPrompt(
                         missing = missingPermissions,
