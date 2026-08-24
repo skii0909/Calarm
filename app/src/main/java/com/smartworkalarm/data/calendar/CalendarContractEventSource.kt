@@ -5,6 +5,7 @@ import android.content.ContentUris
 import android.provider.CalendarContract
 import com.smartworkalarm.domain.model.CalendarEvent
 import com.smartworkalarm.domain.repository.CalendarEventSource
+import com.smartworkalarm.domain.repository.CalendarSelectionRepository
 import java.time.Instant
 import javax.inject.Inject
 import kotlinx.coroutines.Dispatchers
@@ -12,11 +13,16 @@ import kotlinx.coroutines.withContext
 
 class CalendarContractEventSource internal constructor(
     private val calendarIds: () -> List<Long>,
+    private val selectionRepository: CalendarSelectionRepository,
     private val eventQuery: (List<Long>, Instant, Instant) -> List<CalendarEvent>,
 ) : CalendarEventSource {
     @Inject
-    constructor(contentResolver: ContentResolver) : this(
+    constructor(
+        contentResolver: ContentResolver,
+        selectionRepository: CalendarSelectionRepository,
+    ) : this(
         calendarIds = { queryGoogleCalendarIds(contentResolver) },
+        selectionRepository = selectionRepository,
         eventQuery = { ids, start, end -> queryEvents(contentResolver, ids, start, end) },
     )
 
@@ -25,9 +31,14 @@ class CalendarContractEventSource internal constructor(
         endExclusive: Instant,
     ): Result<List<CalendarEvent>> = withContext(Dispatchers.IO) {
         runCatching {
-            val ids = calendarIds()
-            check(ids.isNotEmpty()) { "No readable Google calendars" }
-            eventQuery(ids, startInclusive, endExclusive)
+            val readableIds = calendarIds()
+            val selectedIds = selectionRepository
+                .reconcile(readableIds.toSet())
+                .getOrThrow()
+                .sorted()
+            check(readableIds.isNotEmpty()) { "No readable Google calendars" }
+            check(selectedIds.isNotEmpty()) { "No selected Google calendars" }
+            eventQuery(selectedIds, startInclusive, endExclusive)
         }
     }
 
