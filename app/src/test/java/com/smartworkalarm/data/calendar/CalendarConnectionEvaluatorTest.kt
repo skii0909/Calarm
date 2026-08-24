@@ -21,4 +21,30 @@ class CalendarConnectionEvaluatorTest {
         assertFalse(CalendarConnectionEvaluator.evaluate(false, emptyList()).isConnected)
         assertFalse(CalendarConnectionEvaluator.evaluate(true, emptyList()).isConnected)
     }
+
+    @Test
+    fun `deselecting every readable calendar is disconnected`() {
+        val result = CalendarConnectionEvaluator.evaluate(
+            permissionGranted = true,
+            calendars = listOf(
+                ConnectedCalendar(1, "개인", selected = false),
+                ConnectedCalendar(2, "업무", selected = false),
+            ),
+        )
+
+        assertFalse(result.isConnected)
+    }
+
+    @Test
+    fun `a partially selected calendar catalog is connected`() {
+        val result = CalendarConnectionEvaluator.evaluate(
+            permissionGranted = true,
+            calendars = listOf(
+                ConnectedCalendar(1, "개인", selected = false),
+                ConnectedCalendar(2, "업무", selected = true),
+            ),
+        )
+
+        assertTrue(result.isConnected)
+    }
 }

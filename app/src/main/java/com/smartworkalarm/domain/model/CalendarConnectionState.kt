@@ -11,6 +11,7 @@ data class ConnectedCalendar(
 data class CalendarConnectionState(
     val permissionGranted: Boolean,
     val calendars: List<ConnectedCalendar>,
+    val calendarQuerySucceeded: Boolean = true,
 ) {
-    val isConnected: Boolean = permissionGranted && calendars.isNotEmpty()
+    val isConnected: Boolean = permissionGranted && calendars.any { it.selected }
 }

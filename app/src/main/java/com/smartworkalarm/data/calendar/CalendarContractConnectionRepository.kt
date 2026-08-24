@@ -20,23 +20,25 @@ class CalendarContractConnectionRepository @Inject constructor(
 ) : CalendarConnectionRepository {
     override fun getState(): CalendarConnectionState {
         val permissionGranted = hasPermission()
-        val calendars = if (permissionGranted) queryCalendars() else emptyList()
-        val selectedIds = if (permissionGranted) {
-            selectionRepository.reconcile(calendars.mapTo(mutableSetOf(), ConnectedCalendar::id)).getOrThrow()
+        return if (permissionGranted) {
+            CalendarConnectionStateResolver.resolve(
+                permissionGranted = true,
+                calendars = queryCalendars(),
+                selectionRepository = selectionRepository,
+            )
         } else {
-            emptySet()
+            CalendarConnectionEvaluator.evaluate(
+                permissionGranted = false,
+                calendars = emptyList(),
+            )
         }
-        return CalendarConnectionEvaluator.evaluate(
-            permissionGranted = permissionGranted,
-            calendars = calendars.map { it.copy(selected = it.id in selectedIds) },
-        )
     }
 
     private fun hasPermission(): Boolean =
         ContextCompat.checkSelfPermission(context, Manifest.permission.READ_CALENDAR) ==
             PackageManager.PERMISSION_GRANTED
 
-    private fun queryCalendars(): List<ConnectedCalendar> = runCatching {
+    private fun queryCalendars(): Result<List<ConnectedCalendar>> = runCatching {
         val projection = arrayOf(
             CalendarContract.Calendars._ID,
             CalendarContract.Calendars.CALENDAR_DISPLAY_NAME,
@@ -65,5 +67,5 @@ class CalendarContractConnectionRepository @Inject constructor(
                 }
             }
         }.orEmpty()
-    }.getOrDefault(emptyList())
+    }
 }
