@@ -78,6 +78,7 @@ class AlarmRingingService : Service() {
                 currentIsShiftAlarm,
                 intent?.getBooleanExtra(EXTRA_CALENDAR_WARNING, false) ?: false,
                 currentScheduledOccurrenceAt,
+                snoozeMinutes,
             ),
         )
         if (player == null) {

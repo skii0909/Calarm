@@ -3,6 +3,7 @@ package com.smartworkalarm.presentation.settings
 import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
+import android.os.Build
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -18,6 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.smartworkalarm.domain.model.CalendarConnectionState
+import com.smartworkalarm.alarm.FullScreenAlarmAccess
 
 @Composable
 fun SettingsScreen(state: CalendarConnectionState?, onBack: () -> Unit) {
@@ -32,6 +34,14 @@ fun SettingsScreen(state: CalendarConnectionState?, onBack: () -> Unit) {
             modifier = Modifier.fillMaxWidth(),
         ) { Text("캘린더 연결/권한 설정") }
         Text("Outlook Calendar — 준비 중")
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            Text("잠금화면 알람", style = MaterialTheme.typography.titleLarge)
+            Text(if (FullScreenAlarmAccess.canUse(context)) "전체화면 알람 허용됨" else "전체화면 알람 허용이 필요합니다")
+            Button(
+                onClick = { context.startActivity(FullScreenAlarmAccess.settingsIntent(context)) },
+                modifier = Modifier.fillMaxWidth(),
+            ) { Text("잠금화면 알람 설정") }
+        }
         Text("사용법/도움말", style = MaterialTheme.typography.titleLarge)
         Text("• 알람을 여러 개 만들고 각각 시간과 반복 요일을 지정할 수 있습니다.")
         Text("• 캘린더 건너뛰기는 설정한 알람에만 적용됩니다.")

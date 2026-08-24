@@ -72,6 +72,8 @@
             android:name=".alarm.AlarmActivity"
             android:excludeFromRecents="true"
             android:exported="false"
-            android:launchMode="singleTop" />
+            android:launchMode="singleTop"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true" />
     </application>
 </manifest>

@@ -23,6 +23,7 @@ class AlarmNotificationFactory @Inject constructor(
         isShiftAlarm: Boolean = false,
         calendarWarning: Boolean = false,
         scheduledOccurrenceAt: Instant? = null,
+        snoozeMinutes: Int = 5,
     ): Notification {
         ensureChannel()
         val fullScreen = PendingIntent.getActivity(
@@ -34,6 +35,7 @@ class AlarmNotificationFactory @Inject constructor(
                 putExtra(EXTRA_ALARM_NAME, name)
                 putExtra(AlarmRingingService.EXTRA_IS_SHIFT_ALARM, isShiftAlarm)
                 putExtra(AlarmRingingService.EXTRA_CALENDAR_WARNING, calendarWarning)
+                putExtra(AlarmRingingService.EXTRA_SNOOZE_MINUTES, snoozeMinutes.coerceIn(5, 30))
                 scheduledOccurrenceAt?.let {
                     putExtra(AlarmSchedulerImpl.EXTRA_SCHEDULED_OCCURRENCE_AT, it.toEpochMilli())
                 }
@@ -46,7 +48,9 @@ class AlarmNotificationFactory @Inject constructor(
             .setContentText(if (calendarWarning) "캘린더를 확인하세요" else "알람이 울리고 있습니다")
             .setCategory(NotificationCompat.CATEGORY_ALARM)
             .setPriority(NotificationCompat.PRIORITY_MAX)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setOngoing(true)
+            .setContentIntent(fullScreen)
             .setFullScreenIntent(fullScreen, true)
             .build()
     }
