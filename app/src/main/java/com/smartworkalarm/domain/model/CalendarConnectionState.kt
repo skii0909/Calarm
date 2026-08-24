@@ -3,6 +3,9 @@ package com.smartworkalarm.domain.model
 data class ConnectedCalendar(
     val id: Long,
     val displayName: String,
+    val accountName: String = "",
+    val accountType: String = "",
+    val selected: Boolean = true,
 )
 
 data class CalendarConnectionState(

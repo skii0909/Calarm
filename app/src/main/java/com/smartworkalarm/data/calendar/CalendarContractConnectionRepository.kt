@@ -6,19 +6,31 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.provider.CalendarContract
 import androidx.core.content.ContextCompat
+import com.smartworkalarm.domain.model.CalendarConnectionState
 import com.smartworkalarm.domain.model.ConnectedCalendar
 import com.smartworkalarm.domain.repository.CalendarConnectionRepository
+import com.smartworkalarm.domain.repository.CalendarSelectionRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 
 class CalendarContractConnectionRepository @Inject constructor(
     @param:ApplicationContext private val context: Context,
     private val contentResolver: ContentResolver,
+    private val selectionRepository: CalendarSelectionRepository,
 ) : CalendarConnectionRepository {
-    override fun getState() = CalendarConnectionEvaluator.evaluate(
-        permissionGranted = hasPermission(),
-        calendars = if (hasPermission()) queryCalendars() else emptyList(),
-    )
+    override fun getState(): CalendarConnectionState {
+        val permissionGranted = hasPermission()
+        val calendars = if (permissionGranted) queryCalendars() else emptyList()
+        val selectedIds = if (permissionGranted) {
+            selectionRepository.reconcile(calendars.mapTo(mutableSetOf(), ConnectedCalendar::id)).getOrThrow()
+        } else {
+            emptySet()
+        }
+        return CalendarConnectionEvaluator.evaluate(
+            permissionGranted = permissionGranted,
+            calendars = calendars.map { it.copy(selected = it.id in selectedIds) },
+        )
+    }
 
     private fun hasPermission(): Boolean =
         ContextCompat.checkSelfPermission(context, Manifest.permission.READ_CALENDAR) ==
@@ -28,6 +40,8 @@ class CalendarContractConnectionRepository @Inject constructor(
         val projection = arrayOf(
             CalendarContract.Calendars._ID,
             CalendarContract.Calendars.CALENDAR_DISPLAY_NAME,
+            CalendarContract.Calendars.ACCOUNT_NAME,
+            CalendarContract.Calendars.ACCOUNT_TYPE,
         )
         val selection = "${CalendarContract.Calendars.ACCOUNT_TYPE} = ? AND " +
             "${CalendarContract.Calendars.VISIBLE} = 1 AND ${CalendarContract.Calendars.SYNC_EVENTS} = 1"
@@ -40,7 +54,14 @@ class CalendarContractConnectionRepository @Inject constructor(
         )?.use { cursor ->
             buildList {
                 while (cursor.moveToNext()) {
-                    add(ConnectedCalendar(cursor.getLong(0), cursor.getString(1).orEmpty()))
+                    add(
+                        ConnectedCalendar(
+                            id = cursor.getLong(0),
+                            displayName = cursor.getString(1).orEmpty(),
+                            accountName = cursor.getString(2).orEmpty(),
+                            accountType = cursor.getString(3).orEmpty(),
+                        ),
+                    )
                 }
             }
         }.orEmpty()
