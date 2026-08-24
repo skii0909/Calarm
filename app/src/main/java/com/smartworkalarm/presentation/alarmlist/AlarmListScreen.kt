@@ -1,11 +1,5 @@
 package com.smartworkalarm.presentation.alarmlist
 
-import android.Manifest
-import android.app.AlarmManager
-import android.content.Intent
-import android.net.Uri
-import android.os.Build
-import android.provider.Settings
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -30,15 +24,14 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.sp
-import androidx.core.content.ContextCompat
 import com.smartworkalarm.domain.model.Alarm
 import com.smartworkalarm.domain.model.RepeatDay
 import com.smartworkalarm.presentation.components.FeaturePill
 import com.smartworkalarm.presentation.components.GradientHero
+import com.smartworkalarm.presentation.calendar.calendarConnectionSummary
 import com.smartworkalarm.presentation.shift.ShiftGroupListItem
 import com.smartworkalarm.presentation.shift.ShiftGroupListViewModel
 import com.smartworkalarm.presentation.shift.shiftStatusText
@@ -57,17 +50,6 @@ fun AlarmListScreen(
 ) {
     val alarms by viewModel.alarms.collectAsState()
     val shiftGroups by shiftViewModel.groups.collectAsState()
-    val context = LocalContext.current
-    val alarmManager = context.getSystemService(AlarmManager::class.java)
-    val exactMissing = Build.VERSION.SDK_INT >= 31 && !alarmManager.canScheduleExactAlarms()
-    val calendarMissing = ContextCompat.checkSelfPermission(context, Manifest.permission.READ_CALENDAR) !=
-        android.content.pm.PackageManager.PERMISSION_GRANTED
-    val notificationMissing = Build.VERSION.SDK_INT >= 33 &&
-        ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
-        android.content.pm.PackageManager.PERMISSION_GRANTED
-    val appSettings = {
-        context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${context.packageName}")))
-    }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -99,17 +81,6 @@ fun AlarmListScreen(
                         Text(repeatSummary(next.repeatDaysMask), color = Color.White.copy(alpha = .85f))
                     }
                 }
-            }
-            if (exactMissing) item {
-                PermissionCard("정확한 알람 권한이 필요합니다") {
-                    context.startActivity(Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, Uri.parse("package:${context.packageName}")))
-                }
-            }
-            if (calendarMissing) item {
-                PermissionCard("캘린더 권한이 없어 휴가 자동 건너뛰기가 동작하지 않습니다", appSettings)
-            }
-            if (notificationMissing) item {
-                PermissionCard("알람 알림 권한이 필요합니다", appSettings)
             }
             item {
                 Row(
@@ -175,27 +146,13 @@ private fun ShiftGroupRow(item: ShiftGroupListItem, onClick: () -> Unit) {
                 } ?: "다음 알람 · 없음",
                 style = MaterialTheme.typography.bodyMedium,
             )
-            val connectionText = when {
-                !item.calendarConnection.permissionGranted -> "캘린더 권한 없음"
-                item.calendarConnection.calendars.isEmpty() -> "연결된 캘린더 없음"
-                else -> "연결된 캘린더 ${item.calendarConnection.calendars.size}개"
-            }
+            val connectionText = calendarConnectionSummary(item.calendarConnection)
             Text("근무 형태 ${item.shiftTypes.size}개 · $connectionText", style = MaterialTheme.typography.bodySmall)
             Text(
                 "최근 조회 · ${if (item.lastCalendarQuery.succeeded) "성공" else "실패"}" +
                     if (warning) " · 캘린더 확인 필요" else "",
                 style = MaterialTheme.typography.bodySmall,
             )
-        }
-    }
-}
-
-@Composable
-private fun PermissionCard(message: String, action: (() -> Unit)? = null) {
-    Card(modifier = Modifier.fillMaxWidth().padding(top = 12.dp)) {
-        Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(message, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
-            action?.let { Button(onClick = it) { Text("설정") } }
         }
     }
 }

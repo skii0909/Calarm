@@ -38,7 +38,7 @@ class CalendarContractConnectionRepository @Inject constructor(
         ContextCompat.checkSelfPermission(context, Manifest.permission.READ_CALENDAR) ==
             PackageManager.PERMISSION_GRANTED
 
-    private fun queryCalendars(): Result<List<ConnectedCalendar>> = runCatching {
+    private fun queryCalendars(): Result<List<ConnectedCalendar>> {
         val projection = arrayOf(
             CalendarContract.Calendars._ID,
             CalendarContract.Calendars.CALENDAR_DISPLAY_NAME,
@@ -47,25 +47,40 @@ class CalendarContractConnectionRepository @Inject constructor(
         )
         val selection = "${CalendarContract.Calendars.ACCOUNT_TYPE} = ? AND " +
             "${CalendarContract.Calendars.VISIBLE} = 1 AND ${CalendarContract.Calendars.SYNC_EVENTS} = 1"
-        contentResolver.query(
-            CalendarContract.Calendars.CONTENT_URI,
-            projection,
-            selection,
-            arrayOf("com.google"),
-            CalendarContract.Calendars.CALENDAR_DISPLAY_NAME,
-        )?.use { cursor ->
-            buildList {
-                while (cursor.moveToNext()) {
-                    add(
-                        ConnectedCalendar(
-                            id = cursor.getLong(0),
-                            displayName = cursor.getString(1).orEmpty(),
-                            accountName = cursor.getString(2).orEmpty(),
-                            accountType = cursor.getString(3).orEmpty(),
-                        ),
-                    )
+        return calendarProviderRows(
+            query = {
+                contentResolver.query(
+                    CalendarContract.Calendars.CONTENT_URI,
+                    projection,
+                    selection,
+                    arrayOf("com.google"),
+                    CalendarContract.Calendars.CALENDAR_DISPLAY_NAME,
+                )
+            },
+            readRows = { cursor ->
+                cursor.use {
+                    buildList {
+                        while (it.moveToNext()) {
+                            add(
+                                ConnectedCalendar(
+                                    id = it.getLong(0),
+                                    displayName = it.getString(1).orEmpty(),
+                                    accountName = it.getString(2).orEmpty(),
+                                    accountType = it.getString(3).orEmpty(),
+                                ),
+                            )
+                        }
+                    }
                 }
-            }
-        }.orEmpty()
+            },
+        )
     }
+}
+
+internal fun <T> calendarProviderRows(
+    query: () -> T?,
+    readRows: (T) -> List<ConnectedCalendar>,
+): Result<List<ConnectedCalendar>> = runCatching {
+    val cursor = checkNotNull(query()) { "Calendar provider returned no cursor" }
+    readRows(cursor)
 }

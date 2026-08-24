@@ -1,7 +1,11 @@
 package com.smartworkalarm.data.calendar
 
 import android.content.SharedPreferences
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.FutureTask
+import java.util.concurrent.TimeUnit
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class SharedPreferencesCalendarSelectionRepositoryTest {
@@ -69,7 +73,74 @@ class SharedPreferencesCalendarSelectionRepositoryTest {
         assertEquals(setOf(30L), repository.getSelectedCalendarIds().getOrThrow())
     }
 
+    @Test
+    fun `a user toggle cannot be overwritten by an interleaving reconciliation`() {
+        val preferences = InterleavingSharedPreferences(InMemorySharedPreferences())
+        val backgroundRepository = SharedPreferencesCalendarSelectionRepository(preferences)
+        val settingsRepository = SharedPreferencesCalendarSelectionRepository(preferences)
+        backgroundRepository.reconcile(setOf(10L, 20L)).getOrThrow()
+        preferences.blockReconcileSelectionRead = true
+
+        val reconcile = FutureTask { backgroundRepository.reconcile(setOf(10L, 20L)).getOrThrow() }
+        Thread(reconcile, RECONCILE_THREAD).start()
+        assertTrue(preferences.reconcileSelectionRead.await(5, TimeUnit.SECONDS))
+
+        val toggle = FutureTask { settingsRepository.setCalendarSelected(20L, false).getOrThrow() }
+        Thread(toggle, TOGGLE_THREAD).start()
+        preferences.toggleCommitted.await(1, TimeUnit.SECONDS)
+        preferences.releaseReconcile.countDown()
+
+        reconcile.get(5, TimeUnit.SECONDS)
+        toggle.get(5, TimeUnit.SECONDS)
+        assertEquals(setOf(10L), settingsRepository.getSelectedCalendarIds().getOrThrow())
+    }
+
     private fun repository() = SharedPreferencesCalendarSelectionRepository(InMemorySharedPreferences())
+}
+
+private const val RECONCILE_THREAD = "calendar-reconcile"
+private const val TOGGLE_THREAD = "calendar-toggle"
+
+private class InterleavingSharedPreferences(
+    private val delegate: SharedPreferences,
+) : SharedPreferences by delegate {
+    @Volatile var blockReconcileSelectionRead: Boolean = false
+    val reconcileSelectionRead = CountDownLatch(1)
+    val releaseReconcile = CountDownLatch(1)
+    val toggleCommitted = CountDownLatch(1)
+
+    override fun getStringSet(key: String?, defValues: MutableSet<String>?): MutableSet<String>? {
+        val snapshot = delegate.getStringSet(key, defValues)
+        if (
+            blockReconcileSelectionRead &&
+            key == "selected_ids" &&
+            Thread.currentThread().name == RECONCILE_THREAD
+        ) {
+            reconcileSelectionRead.countDown()
+            check(releaseReconcile.await(5, TimeUnit.SECONDS)) { "reconcile was not released" }
+        }
+        return snapshot
+    }
+
+    override fun edit(): SharedPreferences.Editor = NotifyingEditor(delegate.edit()) {
+        if (Thread.currentThread().name == TOGGLE_THREAD) toggleCommitted.countDown()
+    }
+}
+
+private class NotifyingEditor(
+    private val delegate: SharedPreferences.Editor,
+    private val onCommit: () -> Unit,
+) : SharedPreferences.Editor by delegate {
+    override fun putStringSet(key: String?, values: MutableSet<String>?): SharedPreferences.Editor {
+        delegate.putStringSet(key, values)
+        return this
+    }
+
+    override fun commit(): Boolean {
+        val committed = delegate.commit()
+        onCommit()
+        return committed
+    }
 }
 
 private class InMemorySharedPreferences : SharedPreferences {

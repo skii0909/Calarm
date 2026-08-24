@@ -31,7 +31,13 @@ class ShiftGroupScreenTest {
                         shiftTypes = listOf(type()),
                         todayStatus = ShiftGroupDayStatus.Matched(type()),
                         tomorrowStatus = ShiftGroupDayStatus.None,
-                        calendarConnection = CalendarConnectionState(true, listOf(ConnectedCalendar(1, "근무표"))),
+                        calendarConnection = CalendarConnectionState(
+                            true,
+                            listOf(
+                                ConnectedCalendar(1, "근무표", selected = true),
+                                ConnectedCalendar(2, "개인", selected = false),
+                            ),
+                        ),
                         lastCalendarQuery = CalendarQueryStatus(Instant.parse("2026-08-23T03:00:00Z"), true),
                     ),
                 )

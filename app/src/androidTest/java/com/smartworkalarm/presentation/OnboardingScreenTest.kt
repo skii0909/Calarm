@@ -19,4 +19,19 @@ class OnboardingScreenTest {
 
         composeRule.onNodeWithText("Outlook Calendar는 준비 중입니다.").assertIsDisplayed()
     }
+
+    @Test
+    fun googleCalendarActionRoutesToTheUnifiedSettingsFlow() {
+        var openedSettings = false
+        composeRule.setContent {
+            OnboardingScreen(
+                onComplete = {},
+                onOpenCalendarSettings = { openedSettings = true },
+            )
+        }
+
+        composeRule.onNodeWithText("Google Calendar 연결").performClick()
+
+        composeRule.runOnIdle { check(openedSettings) }
+    }
 }

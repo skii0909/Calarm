@@ -42,8 +42,7 @@ import com.smartworkalarm.presentation.components.NightPulseSection
 fun SettingsScreen(
     state: SettingsUiState,
     permissions: List<PermissionUiState>,
-    onRequestRuntimePermission: (RequiredPermission) -> Unit,
-    onOpenPermissionSettings: (RequiredPermission) -> Unit,
+    onPermissionAction: (RequiredPermission) -> Unit,
     onSetCalendarSelected: (Long, Boolean) -> Unit,
     onSetAccountSelected: (String, Boolean) -> Unit,
     onBack: () -> Unit,
@@ -79,8 +78,7 @@ fun SettingsScreen(
 
         PermissionCard(
             permissions = permissions,
-            onRequestRuntimePermission = onRequestRuntimePermission,
-            onOpenPermissionSettings = onOpenPermissionSettings,
+            onPermissionAction = onPermissionAction,
         )
         CalendarCard(
             state = state,
@@ -97,8 +95,7 @@ fun SettingsScreen(
 @Composable
 private fun PermissionCard(
     permissions: List<PermissionUiState>,
-    onRequestRuntimePermission: (RequiredPermission) -> Unit,
-    onOpenPermissionSettings: (RequiredPermission) -> Unit,
+    onPermissionAction: (RequiredPermission) -> Unit,
 ) {
     NightPulseSection(
         title = "연결 및 권한",
@@ -111,13 +108,7 @@ private fun PermissionCard(
             if (index > 0) HorizontalDivider()
             PermissionRow(
                 permission = permission,
-                onClick = {
-                    if (!permission.granted && permission.permission.isRuntimePermission) {
-                        onRequestRuntimePermission(permission.permission)
-                    } else {
-                        onOpenPermissionSettings(permission.permission)
-                    }
-                },
+                onClick = { onPermissionAction(permission.permission) },
             )
         }
     }
@@ -142,7 +133,7 @@ private fun PermissionRow(
             )
         }
         TextButton(onClick = onClick) {
-            Text(if (!permission.granted && permission.permission.isRuntimePermission) "허용하기" else "설정")
+            Text("설정")
         }
     }
 }

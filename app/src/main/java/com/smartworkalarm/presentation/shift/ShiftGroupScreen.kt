@@ -41,6 +41,7 @@ import com.smartworkalarm.presentation.alarmedit.readableTextFieldColors
 import com.smartworkalarm.presentation.components.FeaturePill
 import com.smartworkalarm.presentation.components.GradientHero
 import com.smartworkalarm.presentation.components.NightPulseSection
+import com.smartworkalarm.presentation.calendar.calendarConnectionSummary
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
@@ -104,11 +105,7 @@ fun ShiftGroupScreen(
         }
         Card(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                val connectionText = when {
-                    !state.calendarConnection.permissionGranted -> "캘린더 권한 없음"
-                    state.calendarConnection.calendars.isEmpty() -> "연결된 캘린더 없음"
-                    else -> "연결된 캘린더 ${state.calendarConnection.calendars.size}개"
-                }
+                val connectionText = calendarConnectionSummary(state.calendarConnection)
                 Text("캘린더 상태", style = MaterialTheme.typography.titleSmall)
                 Text(connectionText)
                 state.lastCalendarQuery?.let { query ->

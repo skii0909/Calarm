@@ -6,8 +6,7 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
-import android.media.AudioAttributes
-import android.provider.Settings
+import android.net.Uri
 import androidx.core.app.NotificationCompat
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.time.Instant
@@ -28,9 +27,10 @@ class AlarmNotificationFactory @Inject constructor(
         ensureChannel()
         val fullScreen = PendingIntent.getActivity(
             context,
-            alarmId.hashCode() + if (isShiftAlarm) SHIFT_FULL_SCREEN_REQUEST_OFFSET else 0,
+            FULL_SCREEN_REQUEST_CODE,
             Intent(context, AlarmActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                data = Uri.parse(fullScreenIntentIdentity(alarmId, isShiftAlarm))
                 putExtra(AlarmSchedulerImpl.EXTRA_ALARM_ID, alarmId)
                 putExtra(EXTRA_ALARM_NAME, name)
                 putExtra(AlarmRingingService.EXTRA_IS_SHIFT_ALARM, isShiftAlarm)
@@ -42,7 +42,7 @@ class AlarmNotificationFactory @Inject constructor(
             },
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
-        return NotificationCompat.Builder(context, CHANNEL_ID)
+        return NotificationCompat.Builder(context, RingingChannelPolicy.ID)
             .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
             .setContentTitle(name)
             .setContentText(if (calendarWarning) "캘린더를 확인하세요" else "알람이 울리고 있습니다")
@@ -56,20 +56,36 @@ class AlarmNotificationFactory @Inject constructor(
     }
 
     private fun ensureChannel() {
-        val channel = NotificationChannel(CHANNEL_ID, "알람", NotificationManager.IMPORTANCE_HIGH).apply {
+        val channel = NotificationChannel(RingingChannelPolicy.ID, "알람", NotificationManager.IMPORTANCE_HIGH).apply {
             description = "Work Alarm 실행 알림"
-            setSound(
-                Settings.System.DEFAULT_ALARM_ALERT_URI,
-                AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ALARM).build(),
-            )
-            enableVibration(true)
         }
+        applyRingingChannelPolicy(
+            disableSound = { channel.setSound(null, null) },
+            setVibrationEnabled = channel::enableVibration,
+        )
         notificationManager.createNotificationChannel(channel)
     }
 
     companion object {
-        const val CHANNEL_ID = "ringing_alarm"
+        const val CHANNEL_ID = RingingChannelPolicy.ID
         const val EXTRA_ALARM_NAME = "alarm_name"
-        private const val SHIFT_FULL_SCREEN_REQUEST_OFFSET = 4_000_000
+        private const val FULL_SCREEN_REQUEST_CODE = 0
     }
+}
+
+internal object RingingChannelPolicy {
+    const val ID = "ringing_alarm_v2_silent"
+}
+
+internal fun applyRingingChannelPolicy(
+    disableSound: () -> Unit,
+    setVibrationEnabled: (Boolean) -> Unit,
+) {
+    disableSound()
+    setVibrationEnabled(false)
+}
+
+internal fun fullScreenIntentIdentity(alarmId: Long, isShiftAlarm: Boolean): String {
+    val namespace = if (isShiftAlarm) "shift" else "ordinary"
+    return "smartworkalarm://ringing/$namespace/$alarmId"
 }

@@ -18,10 +18,10 @@ class NextDayPreviewNotificationFactory @Inject constructor(
     private val manager: NotificationManager,
 ) {
     fun post(
-        alarmChanges: List<AlarmPreviewChange>,
-        shiftChanges: List<ShiftPreviewChange> = emptyList(),
+        alarmEvaluation: AlarmPreviewEvaluation,
+        shiftEvaluation: ShiftPreviewEvaluation,
     ) {
-        val rows = alarmChanges.map(PreviewNotificationText::row) + shiftChanges.map(ShiftPreviewNotificationText::row)
+        val rows = NextDayPreviewNotificationPolicy.rows(alarmEvaluation, shiftEvaluation)
         if (rows.isEmpty()) return
         manager.createNotificationChannel(
             NotificationChannel(CHANNEL_ID, "다음 날 알람 변경", NotificationManager.IMPORTANCE_DEFAULT).apply {
@@ -65,5 +65,23 @@ class NextDayPreviewNotificationFactory @Inject constructor(
     companion object {
         const val CHANNEL_ID = "next_day_alarm_changes"
         private const val NOTIFICATION_ID = 7200
+    }
+}
+
+internal object NextDayPreviewNotificationPolicy {
+    const val CALENDAR_READ_WARNING =
+        "내일 알람을 확인할 캘린더를 읽지 못했습니다. 권한과 선택한 캘린더를 확인해 주세요."
+
+    fun rows(
+        alarmEvaluation: AlarmPreviewEvaluation,
+        shiftEvaluation: ShiftPreviewEvaluation,
+    ): List<String> = buildList {
+        addAll(alarmEvaluation.changes.map(PreviewNotificationText::row))
+        if (!shiftEvaluation.calendarReadFailed) {
+            addAll(shiftEvaluation.changes.map(ShiftPreviewNotificationText::row))
+        }
+        if (alarmEvaluation.calendarReadFailed || shiftEvaluation.calendarReadFailed) {
+            add(CALENDAR_READ_WARNING)
+        }
     }
 }

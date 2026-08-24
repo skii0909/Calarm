@@ -10,8 +10,7 @@ import com.smartworkalarm.permissions.RequiredPermission
 @Composable
 fun RequiredPermissionsPrompt(
     missing: List<RequiredPermission>,
-    onRequestRuntime: (RequiredPermission) -> Unit,
-    onOpenSettings: (RequiredPermission) -> Unit,
+    onPermissionAction: (RequiredPermission) -> Unit,
     onLater: () -> Unit,
 ) {
     val current = missing.firstOrNull() ?: return
@@ -26,17 +25,7 @@ fun RequiredPermissionsPrompt(
         },
         confirmButton = {
             TextButton(
-                onClick = {
-                    when (current) {
-                        RequiredPermission.CALENDAR,
-                        RequiredPermission.NOTIFICATIONS,
-                        -> onRequestRuntime(current)
-
-                        RequiredPermission.EXACT_ALARM,
-                        RequiredPermission.FULL_SCREEN_ALARM,
-                        -> onOpenSettings(current)
-                    }
-                },
+                onClick = { onPermissionAction(current) },
             ) { Text("설정하기") }
         },
         dismissButton = { TextButton(onClick = onLater) { Text("나중에") } },

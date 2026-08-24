@@ -26,6 +26,9 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
@@ -41,6 +44,8 @@ import java.time.format.DateTimeFormatter
 
 @AndroidEntryPoint
 class AlarmActivity : ComponentActivity() {
+    private val presentationState = AlarmPresentationState()
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
@@ -53,37 +58,42 @@ class AlarmActivity : ComponentActivity() {
                     WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON,
             )
         }
-        val id = intent.getLongExtra(AlarmSchedulerImpl.EXTRA_ALARM_ID, -1L)
-        val isShiftAlarm = intent.getBooleanExtra(AlarmRingingService.EXTRA_IS_SHIFT_ALARM, false)
-        val name = intent.getStringExtra(AlarmNotificationFactory.EXTRA_ALARM_NAME) ?: "알람"
-        val calendarWarning = intent.getBooleanExtra(AlarmRingingService.EXTRA_CALENDAR_WARNING, false)
-        val snoozeMinutes = intent.getIntExtra(AlarmRingingService.EXTRA_SNOOZE_MINUTES, 5).coerceIn(5, 30)
-        val scheduledOccurrenceAt = intent.getLongExtra(
-            AlarmSchedulerImpl.EXTRA_SCHEDULED_OCCURRENCE_AT,
-            Long.MIN_VALUE,
-        )
+        presentationState.replace(IntentAlarmPayload(intent))
         setContent {
+            val presentation = presentationState.current
             WorkAlarmTheme {
                 AlarmRingingScreen(
-                    alarmName = name,
+                    alarmName = presentation.alarmName,
                     timeText = LocalTime.now().format(DateTimeFormatter.ofPattern("HH:mm")),
-                    snoozeMinutes = snoozeMinutes,
-                    isShiftAlarm = isShiftAlarm,
-                    calendarWarning = calendarWarning,
-                    onSnooze = { send(ACTION_SNOOZE, id, isShiftAlarm, scheduledOccurrenceAt) },
-                    onDismiss = { send(ACTION_DISMISS, id, isShiftAlarm, scheduledOccurrenceAt) },
+                    snoozeMinutes = presentation.snoozeMinutes,
+                    isShiftAlarm = presentation.isShiftAlarm,
+                    calendarWarning = presentation.calendarWarning,
+                    onSnooze = { send(ACTION_SNOOZE, presentationState.current) },
+                    onDismiss = { send(ACTION_DISMISS, presentationState.current) },
                 )
             }
         }
     }
 
-    private fun send(action: String, id: Long, isShiftAlarm: Boolean, scheduledOccurrenceAt: Long) {
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        presentationState.replace(IntentAlarmPayload(intent))
+    }
+
+    private fun send(action: String, presentation: AlarmPresentation) {
         startService(Intent(this, AlarmRingingService::class.java).apply {
             this.action = action
-            putExtra(AlarmSchedulerImpl.EXTRA_ALARM_ID, id)
-            putExtra(AlarmRingingService.EXTRA_IS_SHIFT_ALARM, isShiftAlarm)
-            if (scheduledOccurrenceAt != Long.MIN_VALUE) {
-                putExtra(AlarmSchedulerImpl.EXTRA_SCHEDULED_OCCURRENCE_AT, scheduledOccurrenceAt)
+            putExtra(AlarmSchedulerImpl.EXTRA_ALARM_ID, presentation.alarmId)
+            putExtra(AlarmRingingService.EXTRA_IS_SHIFT_ALARM, presentation.isShiftAlarm)
+            putExtra(AlarmRingingService.EXTRA_ALARM_NAME, presentation.alarmName)
+            putExtra(AlarmRingingService.EXTRA_CALENDAR_WARNING, presentation.calendarWarning)
+            putExtra(AlarmRingingService.EXTRA_SNOOZE_MINUTES, presentation.snoozeMinutes)
+            if (presentation.scheduledOccurrenceAt != Long.MIN_VALUE) {
+                putExtra(
+                    AlarmSchedulerImpl.EXTRA_SCHEDULED_OCCURRENCE_AT,
+                    presentation.scheduledOccurrenceAt,
+                )
             }
         })
         finish()
@@ -93,6 +103,54 @@ class AlarmActivity : ComponentActivity() {
         private const val ACTION_SNOOZE = AlarmRingingService.ACTION_SNOOZE
         private const val ACTION_DISMISS = AlarmRingingService.ACTION_DISMISS
     }
+}
+
+internal data class AlarmPresentation(
+    val alarmId: Long = -1L,
+    val isShiftAlarm: Boolean = false,
+    val alarmName: String = "알람",
+    val calendarWarning: Boolean = false,
+    val snoozeMinutes: Int = 5,
+    val scheduledOccurrenceAt: Long = Long.MIN_VALUE,
+)
+
+internal interface AlarmPayload {
+    fun getLong(key: String, defaultValue: Long): Long
+    fun getBoolean(key: String, defaultValue: Boolean): Boolean
+    fun getString(key: String): String?
+    fun getInt(key: String, defaultValue: Int): Int
+}
+
+internal class AlarmPresentationState {
+    var current by mutableStateOf(AlarmPresentation())
+        private set
+
+    fun replace(payload: AlarmPayload) {
+        current = parseAlarmPresentation(payload)
+    }
+}
+
+internal fun parseAlarmPresentation(payload: AlarmPayload): AlarmPresentation = AlarmPresentation(
+    alarmId = payload.getLong(AlarmSchedulerImpl.EXTRA_ALARM_ID, -1L),
+    isShiftAlarm = payload.getBoolean(AlarmRingingService.EXTRA_IS_SHIFT_ALARM, false),
+    alarmName = payload.getString(AlarmNotificationFactory.EXTRA_ALARM_NAME) ?: "알람",
+    calendarWarning = payload.getBoolean(AlarmRingingService.EXTRA_CALENDAR_WARNING, false),
+    snoozeMinutes = payload.getInt(AlarmRingingService.EXTRA_SNOOZE_MINUTES, 5).coerceIn(5, 30),
+    scheduledOccurrenceAt = payload.getLong(
+        AlarmSchedulerImpl.EXTRA_SCHEDULED_OCCURRENCE_AT,
+        Long.MIN_VALUE,
+    ),
+)
+
+private class IntentAlarmPayload(private val intent: Intent) : AlarmPayload {
+    override fun getLong(key: String, defaultValue: Long): Long = intent.getLongExtra(key, defaultValue)
+
+    override fun getBoolean(key: String, defaultValue: Boolean): Boolean =
+        intent.getBooleanExtra(key, defaultValue)
+
+    override fun getString(key: String): String? = intent.getStringExtra(key)
+
+    override fun getInt(key: String, defaultValue: Int): Int = intent.getIntExtra(key, defaultValue)
 }
 
 @Composable

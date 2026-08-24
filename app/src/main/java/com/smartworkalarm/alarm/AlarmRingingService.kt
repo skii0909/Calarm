@@ -49,6 +49,7 @@ class AlarmRingingService : Service() {
             ACTION_SNOOZE -> {
                 val id = intent.getLongExtra(AlarmSchedulerImpl.EXTRA_ALARM_ID, currentAlarmId)
                 currentIsShiftAlarm = intent.getBooleanExtra(EXTRA_IS_SHIFT_ALARM, currentIsShiftAlarm)
+                snoozeMinutes = intent.getIntExtra(EXTRA_SNOOZE_MINUTES, snoozeMinutes).coerceIn(5, 30)
                 if (id >= 0) {
                     val triggerAt = clock.instant().plus(Duration.ofMinutes(snoozeMinutes.toLong()))
                     if (currentIsShiftAlarm) {

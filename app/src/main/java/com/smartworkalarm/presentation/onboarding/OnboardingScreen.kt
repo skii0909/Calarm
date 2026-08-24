@@ -1,9 +1,5 @@
 package com.smartworkalarm.presentation.onboarding
 
-import android.Manifest
-import android.os.Build
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -22,11 +18,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 
 @Composable
-fun OnboardingScreen(onComplete: () -> Unit) {
+fun OnboardingScreen(
+    onComplete: () -> Unit,
+    onOpenCalendarSettings: () -> Unit = onComplete,
+) {
     var outlookMessage by remember { mutableStateOf<String?>(null) }
-    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
-        onComplete()
-    }
     Column(
         modifier = Modifier.fillMaxSize().padding(24.dp),
         verticalArrangement = Arrangement.Center,
@@ -38,14 +34,7 @@ fun OnboardingScreen(onComplete: () -> Unit) {
             style = MaterialTheme.typography.titleMedium,
         )
         Button(
-            onClick = {
-                launcher.launch(
-                    buildList {
-                        add(Manifest.permission.READ_CALENDAR)
-                        if (Build.VERSION.SDK_INT >= 33) add(Manifest.permission.POST_NOTIFICATIONS)
-                    }.toTypedArray(),
-                )
-            },
+            onClick = onOpenCalendarSettings,
             modifier = Modifier.fillMaxWidth(),
         ) { Text("Google Calendar 연결") }
         OutlinedButton(

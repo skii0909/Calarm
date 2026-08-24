@@ -2,6 +2,7 @@ package com.smartworkalarm.presentation.calendar
 
 import com.smartworkalarm.domain.model.CalendarConnectionState
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -27,6 +28,59 @@ class CalendarConnectionPromptVisibilityTest {
             shouldShowCalendarConnectionPrompt(
                 state = disconnectedCalendar,
                 requiredPermissionsMissing = false,
+            ),
+        )
+    }
+
+    @Test
+    fun `entering each alarm edit entry resets an earlier dismissal`() {
+        val listKey = calendarConnectionPromptRequestKey("alarms", "list-entry")
+        val firstEditKey = calendarConnectionPromptRequestKey("alarm/{alarmId}", "edit-entry-1")
+        val secondEditKey = calendarConnectionPromptRequestKey("alarm/{alarmId}", "edit-entry-2")
+
+        assertNotEquals(firstEditKey, secondEditKey)
+        assertTrue(
+            shouldShowCalendarConnectionPrompt(
+                state = disconnectedCalendar,
+                requiredPermissionsMissing = false,
+                requestKey = firstEditKey,
+                dismissedRequestKey = listKey,
+            ),
+        )
+        assertTrue(
+            shouldShowCalendarConnectionPrompt(
+                state = disconnectedCalendar,
+                requiredPermissionsMissing = false,
+                requestKey = secondEditKey,
+                dismissedRequestKey = firstEditKey,
+            ),
+        )
+    }
+
+    @Test
+    fun `shift edit entries request connection while settings itself does not`() {
+        val shiftGroupKey = calendarConnectionPromptRequestKey("shift-group/{groupId}", "group-entry")
+        val shiftTypeKey = calendarConnectionPromptRequestKey(
+            "shift-type/{groupId}/{shiftTypeId}",
+            "type-entry",
+        )
+
+        assertTrue(shiftGroupKey != null)
+        assertTrue(shiftTypeKey != null)
+        assertTrue(
+            shouldShowCalendarConnectionPrompt(
+                state = disconnectedCalendar,
+                requiredPermissionsMissing = false,
+                requestKey = shiftTypeKey,
+                dismissedRequestKey = shiftGroupKey,
+            ),
+        )
+        assertFalse(
+            shouldShowCalendarConnectionPrompt(
+                state = disconnectedCalendar,
+                requiredPermissionsMissing = false,
+                requestKey = calendarConnectionPromptRequestKey("settings", "settings-entry"),
+                dismissedRequestKey = null,
             ),
         )
     }

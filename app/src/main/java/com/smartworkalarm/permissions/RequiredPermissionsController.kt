@@ -3,6 +3,7 @@ package com.smartworkalarm.permissions
 import android.Manifest
 import android.app.AlarmManager
 import android.app.NotificationManager
+import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -29,26 +30,43 @@ class RequiredPermissionsController(
         RequiredPermission.NOTIFICATIONS,
         -> null
 
-        RequiredPermission.EXACT_ALARM -> resolvedOrAppDetails(
-            Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, packageUri),
+        RequiredPermission.EXACT_ALARM -> Intent(
+            Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM,
+            packageUri,
         )
 
-        RequiredPermission.FULL_SCREEN_ALARM -> resolvedOrAppDetails(
-            Intent(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT, packageUri),
+        RequiredPermission.FULL_SCREEN_ALARM -> Intent(
+            Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT,
+            packageUri,
         )
     }
 
-    private fun isGranted(permission: String): Boolean =
-        ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
-
-    private fun resolvedOrAppDetails(intent: Intent): Intent =
-        if (intent.resolveActivity(context.packageManager) != null) intent else appDetailsIntent()
-
-    private fun appDetailsIntent(): Intent = Intent(
+    fun appDetailsIntent(): Intent = Intent(
         Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
         packageUri,
     )
 
+    private fun isGranted(permission: String): Boolean =
+        ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
+
     private val packageUri: Uri
         get() = Uri.parse("package:${context.packageName}")
+}
+
+internal fun <T> launchPermissionSettings(
+    primary: T?,
+    appDetails: T,
+    launch: (T) -> Unit,
+) {
+    if (primary == null) {
+        launch(appDetails)
+        return
+    }
+    try {
+        launch(primary)
+    } catch (_: ActivityNotFoundException) {
+        launch(appDetails)
+    } catch (_: RuntimeException) {
+        launch(appDetails)
+    }
 }

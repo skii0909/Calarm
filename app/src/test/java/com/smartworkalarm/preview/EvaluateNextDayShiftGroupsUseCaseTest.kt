@@ -19,6 +19,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -40,6 +41,64 @@ class EvaluateNextDayShiftGroupsUseCaseTest {
 
         assertTrue(useCase.execute(today, tomorrow, zone).isEmpty())
         assertEquals("MATCHED:2", previews.get(group.id)?.stateKey)
+    }
+
+    @Test
+    fun `unchanged successful shift state produces no system notice`() = runTest {
+        calendar.eventsByDate[today] = listOf(event(today, "야간"))
+        calendar.eventsByDate[tomorrow] = listOf(event(tomorrow, "야간"))
+
+        val evaluation = useCase.executeWithStatus(today, tomorrow, zone)
+        val rows = NextDayPreviewNotificationPolicy.rows(
+            alarmEvaluation = AlarmPreviewEvaluation(),
+            shiftEvaluation = evaluation,
+        )
+
+        assertFalse(evaluation.calendarReadFailed)
+        assertTrue(rows.isEmpty())
+    }
+
+    @Test
+    fun `unchanged shift read failure still produces one system warning`() = runTest {
+        calendar.failOn(today)
+        calendar.failOn(tomorrow)
+
+        val evaluation = useCase.executeWithStatus(today, tomorrow, zone)
+        val rows = NextDayPreviewNotificationPolicy.rows(
+            alarmEvaluation = AlarmPreviewEvaluation(),
+            shiftEvaluation = evaluation,
+        )
+
+        assertTrue(evaluation.calendarReadFailed)
+        assertTrue(evaluation.changes.isEmpty())
+        assertEquals(
+            listOf("내일 알람을 확인할 캘린더를 읽지 못했습니다. 권한과 선택한 캘린더를 확인해 주세요."),
+            rows,
+        )
+    }
+
+    @Test
+    fun `a failed shift evaluation does not emit a derived success change beside its warning`() {
+        val evaluation = ShiftPreviewEvaluation(
+            changes = listOf(
+                ShiftPreviewChange(
+                    group = group,
+                    previousKey = "READ_FAILURE",
+                    currentEvaluation = ShiftDayEvaluation.Matched(day.id, day.name),
+                ),
+            ),
+            calendarReadFailed = true,
+        )
+
+        val rows = NextDayPreviewNotificationPolicy.rows(
+            alarmEvaluation = AlarmPreviewEvaluation(),
+            shiftEvaluation = evaluation,
+        )
+
+        assertEquals(
+            listOf("내일 알람을 확인할 캘린더를 읽지 못했습니다. 권한과 선택한 캘린더를 확인해 주세요."),
+            rows,
+        )
     }
 
     @Test

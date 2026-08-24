@@ -22,3 +22,38 @@ enum class RequiredPermission {
         }
     }
 }
+
+internal enum class RequiredPermissionAction {
+    REQUEST_RUNTIME,
+    OPEN_APP_DETAILS,
+    OPEN_SPECIAL_SETTINGS,
+}
+
+internal fun requiredPermissionAction(
+    permission: RequiredPermission,
+    isMissing: Boolean,
+    wasRequested: Boolean,
+    shouldShowRationale: Boolean,
+): RequiredPermissionAction {
+    val isRuntimePermission = permission == RequiredPermission.CALENDAR ||
+        permission == RequiredPermission.NOTIFICATIONS
+    if (!isRuntimePermission) return RequiredPermissionAction.OPEN_SPECIAL_SETTINGS
+    if (!isMissing) return RequiredPermissionAction.OPEN_APP_DETAILS
+    return if (!wasRequested || shouldShowRationale) {
+        RequiredPermissionAction.REQUEST_RUNTIME
+    } else {
+        RequiredPermissionAction.OPEN_APP_DETAILS
+    }
+}
+
+internal data class RequiredPermissionsPromptSessionState(
+    val dismissedForSession: Boolean = false,
+) {
+    fun shouldShow(missing: List<RequiredPermission>): Boolean =
+        missing.isNotEmpty() && !dismissedForSession
+
+    fun dismiss(): RequiredPermissionsPromptSessionState = copy(dismissedForSession = true)
+
+    fun afterPermissionsRefresh(missing: List<RequiredPermission>): RequiredPermissionsPromptSessionState =
+        if (missing.isEmpty()) copy(dismissedForSession = false) else this
+}

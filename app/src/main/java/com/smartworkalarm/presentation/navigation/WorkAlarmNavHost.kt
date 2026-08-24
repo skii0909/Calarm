@@ -15,9 +15,11 @@ import com.smartworkalarm.presentation.onboarding.OnboardingPreferences
 import com.smartworkalarm.presentation.onboarding.OnboardingScreen
 import com.smartworkalarm.presentation.calendar.CalendarConnectionPrompt
 import com.smartworkalarm.presentation.calendar.CalendarConnectionViewModel
+import com.smartworkalarm.presentation.calendar.calendarConnectionPromptRequestKey
 import com.smartworkalarm.presentation.settings.SettingsRoute
 import com.smartworkalarm.presentation.shift.ShiftGroupScreen
 import com.smartworkalarm.presentation.shift.ShiftTypeEditScreen
+import com.smartworkalarm.permissions.RequiredPermission
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.collectAsState
@@ -27,28 +29,42 @@ import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.ui.Modifier
 
 @Composable
-fun WorkAlarmNavHost(requiredPermissionsMissing: Boolean = false) {
+fun WorkAlarmNavHost(
+    missingRequiredPermissions: List<RequiredPermission> = emptyList(),
+    onRequiredPermissionAction: (RequiredPermission) -> Unit = {},
+) {
     val navController = rememberNavController()
     val preferences = OnboardingPreferences(LocalContext.current)
     val start = if (preferences.isComplete()) ALARMS else ONBOARDING
     val connectionViewModel: CalendarConnectionViewModel = hiltViewModel()
     val connectionState by connectionViewModel.state.collectAsState()
     val entry by navController.currentBackStackEntryAsState()
-    LaunchedEffect(entry?.destination?.route) { connectionViewModel.refresh() }
+    val route = entry?.destination?.route
+    LaunchedEffect(route, missingRequiredPermissions) {
+        connectionViewModel.refresh()
+    }
     Box(Modifier.fillMaxSize().safeDrawingPadding()) {
     CalendarConnectionPrompt(
         state = connectionState,
-        requiredPermissionsMissing = requiredPermissionsMissing,
+        requiredPermissionsMissing = missingRequiredPermissions.isNotEmpty(),
+        requestKey = calendarConnectionPromptRequestKey(route, entry?.id),
         onOpenSettings = {
             if (entry?.destination?.route != SETTINGS) navController.navigate(SETTINGS)
         },
     )
     NavHost(navController = navController, startDestination = start) {
         composable(ONBOARDING) {
-            OnboardingScreen {
-                preferences.complete()
-                navController.navigate(ALARMS) { popUpTo(ONBOARDING) { inclusive = true } }
-            }
+            OnboardingScreen(
+                onComplete = {
+                    preferences.complete()
+                    navController.navigate(ALARMS) { popUpTo(ONBOARDING) { inclusive = true } }
+                },
+                onOpenCalendarSettings = {
+                    preferences.complete()
+                    navController.navigate(ALARMS) { popUpTo(ONBOARDING) { inclusive = true } }
+                    navController.navigate(SETTINGS)
+                },
+            )
         }
         composable(ALARMS) {
             AlarmListScreen(
@@ -72,7 +88,12 @@ fun WorkAlarmNavHost(requiredPermissionsMissing: Boolean = false) {
             )
         }
         composable(SETTINGS) {
-            SettingsRoute(onBack = { navController.popBackStack() })
+            SettingsRoute(
+                onBack = { navController.popBackStack() },
+                missingRequiredPermissions = missingRequiredPermissions,
+                onPermissionAction = onRequiredPermissionAction,
+                onCalendarConnectionChanged = connectionViewModel::refresh,
+            )
         }
         composable(
             route = "shift-group/{groupId}",

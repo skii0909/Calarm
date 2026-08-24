@@ -7,26 +7,30 @@ import javax.inject.Inject
 class SharedPreferencesCalendarSelectionRepository @Inject constructor(
     private val preferences: SharedPreferences,
 ) : CalendarSelectionRepository {
-    override fun getSelectedCalendarIds(): Result<Set<Long>> = runCatching {
-        preferences.getStringSet(SELECTED_IDS_KEY, emptySet())
-            .orEmpty()
-            .map(String::toLong)
-            .toSet()
+    override fun getSelectedCalendarIds(): Result<Set<Long>> = synchronized(SELECTION_LOCK) {
+        runCatching { readIds(SELECTED_IDS_KEY) }
     }
 
-    override fun reconcile(availableCalendarIds: Set<Long>): Result<Set<Long>> = runCatching {
-        val knownIds = readIds(KNOWN_IDS_KEY)
-        val selectedIds = readIds(SELECTED_IDS_KEY)
-        val nextSelectedIds = (selectedIds intersect availableCalendarIds) +
-            (availableCalendarIds - knownIds)
-        persist(availableCalendarIds, nextSelectedIds)
-        nextSelectedIds
+    override fun reconcile(availableCalendarIds: Set<Long>): Result<Set<Long>> = synchronized(SELECTION_LOCK) {
+        runCatching {
+            val knownIds = readIds(KNOWN_IDS_KEY)
+            val selectedIds = readIds(SELECTED_IDS_KEY)
+            val nextSelectedIds = (selectedIds intersect availableCalendarIds) +
+                (availableCalendarIds - knownIds)
+            persist(availableCalendarIds, nextSelectedIds)
+            nextSelectedIds
+        }
     }
 
-    override fun setCalendarSelected(calendarId: Long, selected: Boolean): Result<Unit> =
-        setCalendarsSelected(setOf(calendarId), selected)
+    override fun setCalendarSelected(calendarId: Long, selected: Boolean): Result<Unit> = synchronized(SELECTION_LOCK) {
+        updateSelection(setOf(calendarId), selected)
+    }
 
-    override fun setCalendarsSelected(calendarIds: Set<Long>, selected: Boolean): Result<Unit> = runCatching {
+    override fun setCalendarsSelected(calendarIds: Set<Long>, selected: Boolean): Result<Unit> = synchronized(SELECTION_LOCK) {
+        updateSelection(calendarIds, selected)
+    }
+
+    private fun updateSelection(calendarIds: Set<Long>, selected: Boolean): Result<Unit> = runCatching {
         val nextSelectedIds = readIds(SELECTED_IDS_KEY).toMutableSet().apply {
             if (selected) addAll(calendarIds) else removeAll(calendarIds)
         }
@@ -48,6 +52,7 @@ class SharedPreferencesCalendarSelectionRepository @Inject constructor(
     }
 
     private companion object {
+        val SELECTION_LOCK = Any()
         const val KNOWN_IDS_KEY = "known_ids"
         const val SELECTED_IDS_KEY = "selected_ids"
     }

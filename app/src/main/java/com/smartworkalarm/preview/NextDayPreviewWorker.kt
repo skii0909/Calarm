@@ -23,8 +23,8 @@ class NextDayPreviewWorker @AssistedInject constructor(
         val today = clock.instant().atZone(zoneId).toLocalDate()
         val tomorrow = today.plusDays(1)
         notifications.post(
-            alarmChanges = evaluate.execute(tomorrow, zoneId),
-            shiftChanges = evaluateShiftGroups.execute(today, tomorrow, zoneId),
+            alarmEvaluation = evaluate.executeWithStatus(tomorrow, zoneId),
+            shiftEvaluation = evaluateShiftGroups.executeWithStatus(today, tomorrow, zoneId),
         )
     }.fold({ Result.success() }, { Result.retry() })
 }

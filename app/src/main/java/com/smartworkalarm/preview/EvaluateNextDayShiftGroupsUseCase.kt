@@ -23,6 +23,11 @@ data class ShiftPreviewChange(
     val currentKey: String get() = ShiftPreviewStateKey.of(currentEvaluation)
 }
 
+data class ShiftPreviewEvaluation(
+    val changes: List<ShiftPreviewChange> = emptyList(),
+    val calendarReadFailed: Boolean = false,
+)
+
 object ShiftPreviewStateKey {
     fun of(evaluation: ShiftDayEvaluation): String = when (evaluation) {
         is ShiftDayEvaluation.Matched -> "MATCHED:${evaluation.shiftTypeId}"
@@ -52,14 +57,20 @@ class EvaluateNextDayShiftGroupsUseCase @Inject constructor(
         today: LocalDate,
         tomorrow: LocalDate,
         zoneId: ZoneId,
-    ): List<ShiftPreviewChange> {
+    ): List<ShiftPreviewChange> = executeWithStatus(today, tomorrow, zoneId).changes
+
+    suspend fun executeWithStatus(
+        today: LocalDate,
+        tomorrow: LocalDate,
+        zoneId: ZoneId,
+    ): ShiftPreviewEvaluation {
         val groups = repository.observeGroupsWithTypes().first()
             .filter { it.group.enabled }
-        if (groups.isEmpty()) return emptyList()
+        if (groups.isEmpty()) return ShiftPreviewEvaluation()
 
         val todayEvents = eventsFor(today, zoneId)
         val tomorrowEvents = eventsFor(tomorrow, zoneId)
-        return buildList {
+        val changes = buildList {
             groups.forEach { groupWithTypes ->
                 val previous = effectiveEvaluator.execute(groupWithTypes, today, todayEvents).toPreviewEvaluation()
                 val current = effectiveEvaluator.execute(groupWithTypes, tomorrow, tomorrowEvents).toPreviewEvaluation()
@@ -73,6 +84,10 @@ class EvaluateNextDayShiftGroupsUseCase @Inject constructor(
                 )
             }
         }
+        return ShiftPreviewEvaluation(
+            changes = changes,
+            calendarReadFailed = todayEvents.isFailure || tomorrowEvents.isFailure,
+        )
     }
 
     private suspend fun eventsFor(date: LocalDate, zoneId: ZoneId): Result<List<CalendarEvent>> =

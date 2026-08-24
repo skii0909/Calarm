@@ -14,19 +14,28 @@ import com.smartworkalarm.domain.model.CalendarConnectionState
 fun CalendarConnectionPrompt(
     state: CalendarConnectionState?,
     requiredPermissionsMissing: Boolean,
+    requestKey: String?,
     onOpenSettings: () -> Unit,
 ) {
-    if (!shouldShowCalendarConnectionPrompt(state, requiredPermissionsMissing)) return
-    var dismissed by remember(state) { mutableStateOf(false) }
-    if (dismissed) return
+    var dismissedRequestKey by remember { mutableStateOf<String?>(null) }
+    if (
+        !shouldShowCalendarConnectionPrompt(
+            state = state,
+            requiredPermissionsMissing = requiredPermissionsMissing,
+            requestKey = requestKey,
+            dismissedRequestKey = dismissedRequestKey,
+        )
+    ) return
     AlertDialog(
-        onDismissRequest = { dismissed = true },
+        onDismissRequest = { dismissedRequestKey = requestKey },
         title = { Text("캘린더 연결이 필요합니다") },
         text = { Text("일정에 따라 알람을 자동으로 건너뛰려면 Google Calendar를 연결해 주세요.") },
-        dismissButton = { TextButton(onClick = { dismissed = true }) { Text("나중에") } },
+        dismissButton = {
+            TextButton(onClick = { dismissedRequestKey = requestKey }) { Text("나중에") }
+        },
         confirmButton = {
             TextButton(onClick = {
-                dismissed = true
+                dismissedRequestKey = requestKey
                 onOpenSettings()
             }) { Text("연결하기") }
         },
@@ -36,7 +45,27 @@ fun CalendarConnectionPrompt(
 internal fun shouldShowCalendarConnectionPrompt(
     state: CalendarConnectionState?,
     requiredPermissionsMissing: Boolean,
+    requestKey: String? = "session",
+    dismissedRequestKey: String? = null,
 ): Boolean = state != null &&
     !state.isConnected &&
     state.permissionGranted &&
-    !requiredPermissionsMissing
+    !requiredPermissionsMissing &&
+    requestKey != null &&
+    requestKey != dismissedRequestKey
+
+internal fun calendarConnectionPromptRequestKey(
+    route: String?,
+    backStackEntryId: String?,
+): String? = when (route) {
+    null,
+    "settings",
+    -> null
+
+    "alarm/{alarmId}",
+    "shift-group/{groupId}",
+    "shift-type/{groupId}/{shiftTypeId}",
+    -> "$route#${backStackEntryId.orEmpty()}"
+
+    else -> route
+}
