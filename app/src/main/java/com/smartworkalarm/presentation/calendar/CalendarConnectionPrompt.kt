@@ -1,11 +1,8 @@
 package com.smartworkalarm.presentation.calendar
 
-import android.Manifest
 import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -19,11 +16,10 @@ import com.smartworkalarm.domain.model.CalendarConnectionState
 
 @Composable
 fun CalendarConnectionPrompt(state: CalendarConnectionState?, refresh: () -> Unit) {
-    if (state == null || state.isConnected) return
+    if (state == null || state.isConnected || !state.permissionGranted) return
     var dismissed by remember(state) { mutableStateOf(false) }
     if (dismissed) return
     val context = LocalContext.current
-    val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { refresh() }
     AlertDialog(
         onDismissRequest = { dismissed = true },
         title = { Text("캘린더 연결이 필요합니다") },
@@ -31,14 +27,10 @@ fun CalendarConnectionPrompt(state: CalendarConnectionState?, refresh: () -> Uni
         dismissButton = { TextButton(onClick = { dismissed = true }) { Text("나중에") } },
         confirmButton = {
             TextButton(onClick = {
-                if (!state.permissionGranted) {
-                    permission.launch(Manifest.permission.READ_CALENDAR)
-                } else {
-                    runCatching { context.startActivity(Intent(Settings.ACTION_SYNC_SETTINGS)) }
-                        .getOrElse {
-                            context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${context.packageName}")))
-                        }
-                }
+                runCatching { context.startActivity(Intent(Settings.ACTION_SYNC_SETTINGS)) }
+                    .getOrElse {
+                        context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${context.packageName}")))
+                    }
             }) { Text("연결하기") }
         },
     )

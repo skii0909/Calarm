@@ -1,42 +1,53 @@
 package com.smartworkalarm
 
+import android.Manifest
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import com.smartworkalarm.alarm.FullScreenAlarmAccess
+import com.smartworkalarm.permissions.RequiredPermission
+import com.smartworkalarm.permissions.RequiredPermissionsController
 import com.smartworkalarm.presentation.navigation.WorkAlarmNavHost
+import com.smartworkalarm.presentation.permissions.RequiredPermissionsPrompt
 import com.smartworkalarm.presentation.theme.WorkAlarmTheme
 import dagger.hilt.android.AndroidEntryPoint
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
-    private var showFullScreenAlarmPrompt by mutableStateOf(false)
+    private lateinit var requiredPermissions: RequiredPermissionsController
+    private var missingPermissions by mutableStateOf(emptyList<RequiredPermission>())
+    private var permissionsPromptDismissed by mutableStateOf(false)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        requiredPermissions = RequiredPermissionsController(this)
         setContent {
+            val calendarPermission = rememberLauncherForActivityResult(
+                ActivityResultContracts.RequestPermission(),
+            ) { refreshRequiredPermissions() }
+            val notificationPermission = rememberLauncherForActivityResult(
+                ActivityResultContracts.RequestPermission(),
+            ) { refreshRequiredPermissions() }
             WorkAlarmTheme {
                 WorkAlarmNavHost()
-                if (showFullScreenAlarmPrompt) {
-                    AlertDialog(
-                        onDismissRequest = { showFullScreenAlarmPrompt = false },
-                        title = { Text("잠금화면 알람 허용") },
-                        text = { Text("알람이 울릴 때 잠금화면 위에 해제 화면을 표시하려면 전체화면 알람을 허용해 주세요.") },
-                        confirmButton = {
-                            TextButton(onClick = {
-                                showFullScreenAlarmPrompt = false
-                                startActivity(FullScreenAlarmAccess.settingsIntent(this))
-                            }) { Text("설정 열기") }
+                if (!permissionsPromptDismissed) {
+                    RequiredPermissionsPrompt(
+                        missing = missingPermissions,
+                        onRequestRuntime = { permission ->
+                            when (permission) {
+                                RequiredPermission.CALENDAR -> calendarPermission.launch(Manifest.permission.READ_CALENDAR)
+                                RequiredPermission.NOTIFICATIONS -> notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+                                else -> Unit
+                            }
                         },
-                        dismissButton = {
-                            TextButton(onClick = { showFullScreenAlarmPrompt = false }) { Text("나중에") }
+                        onOpenSettings = { permission ->
+                            requiredPermissions.settingsIntent(permission)?.let(::startActivity)
                         },
+                        onLater = { permissionsPromptDismissed = true },
                     )
                 }
             }
@@ -45,6 +56,11 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
-        showFullScreenAlarmPrompt = !FullScreenAlarmAccess.canUse(this)
+        if (::requiredPermissions.isInitialized) refreshRequiredPermissions()
+    }
+
+    private fun refreshRequiredPermissions() {
+        missingPermissions = requiredPermissions.missing()
+        if (missingPermissions.isEmpty()) permissionsPromptDismissed = false
     }
 }
