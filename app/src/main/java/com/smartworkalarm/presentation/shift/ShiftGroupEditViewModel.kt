@@ -202,6 +202,7 @@ class ShiftGroupEditViewModel @Inject constructor(
     fun onShiftEnabledChanged(value: Boolean) = _shiftTypeState.update { it.copy(enabled = value) }
     fun onShiftRingtoneChanged(value: String?) = _shiftTypeState.update { it.copy(ringtoneUri = value) }
     fun onShiftGradualVolumeChanged(value: Boolean) = _shiftTypeState.update { it.copy(gradualVolume = value) }
+    fun onShiftSnoozeEnabledChanged(enabled: Boolean) = _shiftTypeState.update { it.copy(snoozeEnabled = enabled) }
     fun onShiftSnoozeChanged(value: Int) = _shiftTypeState.update { it.copy(snoozeMinutes = value.coerceIn(5, 30)) }
     fun onShiftHolidayChanged(value: Boolean) = _shiftTypeState.update { it.copy(skipOnPublicHoliday = value) }
 

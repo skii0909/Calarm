@@ -16,6 +16,7 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -72,6 +73,29 @@ class AlarmEditViewModelTest {
         assertTrue(saved.skipOnPublicHoliday)
         assertTrue(saved.gradualVolume)
         assertEquals(12, saved.snoozeMinutes)
+    }
+
+    @Test
+    fun `new alarm defaults snooze to enabled`() = runTest(dispatcher) {
+        val viewModel = viewModelWith(FakeSaver())
+
+        assertTrue(viewModel.state.value.snoozeEnabled)
+    }
+
+    @Test
+    fun `disabling snooze preserves selected minutes on save`() = runTest(dispatcher) {
+        val saver = FakeSaver()
+        val viewModel = viewModelWith(saver)
+        viewModel.onNameChanged("출근")
+        viewModel.toggleDay(RepeatDay.MONDAY)
+        viewModel.onSnoozeMinutesChanged(19)
+        viewModel.onSnoozeEnabledChanged(false)
+
+        viewModel.save()
+        advanceUntilIdle()
+
+        assertFalse(saver.saved.single().snoozeEnabled)
+        assertEquals(19, saver.saved.single().snoozeMinutes)
     }
 
     @Test

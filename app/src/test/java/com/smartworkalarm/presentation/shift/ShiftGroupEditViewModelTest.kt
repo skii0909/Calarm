@@ -31,6 +31,7 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -204,6 +205,39 @@ class ShiftGroupEditViewModelTest {
         advanceUntilIdle()
 
         assertEquals(false, repository.savedTypes.single().snoozeEnabled)
+    }
+
+    @Test
+    fun `shift type restores disabled snooze and minutes`() = runTest(dispatcher) {
+        val restored = type(1, "주간", listOf("주간")).copy(snoozeEnabled = false, snoozeMinutes = 21)
+        val viewModel = viewModel(
+            FakeShiftRepository(groupWithTypes(types = listOf(restored, type(2, "야간", listOf("야간"))))),
+        )
+
+        viewModel.loadShiftType(groupId = 10, shiftTypeId = restored.id)
+        advanceUntilIdle()
+
+        assertFalse(viewModel.shiftTypeState.value.snoozeEnabled)
+        assertEquals(21, viewModel.shiftTypeState.value.snoozeMinutes)
+    }
+
+    @Test
+    fun `disabling shift snooze preserves selected minutes on save`() = runTest(dispatcher) {
+        val repository = FakeShiftRepository(groupWithTypes())
+        val viewModel = viewModel(repository)
+        viewModel.loadShiftType(groupId = 10, shiftTypeId = 0)
+        advanceUntilIdle()
+        viewModel.onShiftTypeNameChanged("새벽")
+        viewModel.onExactTitlesChanged("새벽")
+        viewModel.toggleShiftDay(com.smartworkalarm.domain.model.RepeatDay.MONDAY)
+        viewModel.onShiftSnoozeChanged(19)
+        viewModel.onShiftSnoozeEnabledChanged(false)
+
+        viewModel.saveShiftType()
+        advanceUntilIdle()
+
+        assertFalse(repository.savedTypes.single().snoozeEnabled)
+        assertEquals(19, repository.savedTypes.single().snoozeMinutes)
     }
 
     @Test

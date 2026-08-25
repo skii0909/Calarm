@@ -74,6 +74,7 @@ class AlarmEditViewModel @Inject constructor(
     fun onRingtoneChanged(value: String?) = _state.update { it.copy(ringtoneUri = value) }
     fun onSkipOnPublicHolidayChanged(value: Boolean) = _state.update { it.copy(skipOnPublicHoliday = value) }
     fun onGradualVolumeChanged(value: Boolean) = _state.update { it.copy(gradualVolume = value) }
+    fun onSnoozeEnabledChanged(enabled: Boolean) = _state.update { it.copy(snoozeEnabled = enabled) }
     fun onSnoozeMinutesChanged(value: Int) = _state.update { it.copy(snoozeMinutes = value.coerceIn(5, 30)) }
     fun toggleDay(day: RepeatDay) = _state.update {
         it.copy(repeatDaysMask = it.repeatDaysMask xor day.bit, repeatDaysError = null)

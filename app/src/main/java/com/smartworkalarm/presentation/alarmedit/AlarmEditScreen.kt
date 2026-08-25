@@ -83,17 +83,12 @@ fun AlarmEditScreen(viewModel: AlarmEditViewModel, alarmId: Long, onDone: () -> 
         }
         NightPulseSection("알람음과 다시 울림", "매일 사용할 소리와 다시 울림 간격") {
             AlarmRingtonePickerField(state.ringtoneUri, viewModel::onRingtoneChanged)
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-                Column {
-                    Text("다시 울림", style = MaterialTheme.typography.titleSmall)
-                    Text("5~30분", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    OutlinedButton(onClick = { viewModel.onSnoozeMinutesChanged(state.snoozeMinutes - 1) }, enabled = state.snoozeMinutes > 5) { Text("−") }
-                    Text("${state.snoozeMinutes}분", modifier = Modifier.padding(horizontal = 12.dp), style = MaterialTheme.typography.titleMedium)
-                    OutlinedButton(onClick = { viewModel.onSnoozeMinutesChanged(state.snoozeMinutes + 1) }, enabled = state.snoozeMinutes < 30) { Text("+") }
-                }
-            }
+            AlarmSnoozeSettings(
+                snoozeEnabled = state.snoozeEnabled,
+                snoozeMinutes = state.snoozeMinutes,
+                onSnoozeEnabledChanged = viewModel::onSnoozeEnabledChanged,
+                onSnoozeMinutesChanged = viewModel::onSnoozeMinutesChanged,
+            )
         }
         NightPulseSection("자동 건너뛰기", "쉬는 날은 이 알람만 조용하게") {
             SettingSwitch("캘린더 일정으로 건너뛰기", state.skipOnCalendarMatch, viewModel::onSkipOnCalendarMatchChanged)
@@ -117,6 +112,48 @@ fun AlarmEditScreen(viewModel: AlarmEditViewModel, alarmId: Long, onDone: () -> 
         Button(onClick = viewModel::save, modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.extraLarge) { Text("알람 저장") }
         if (alarmId != 0L) OutlinedButton(onClick = { viewModel.delete() }, modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.extraLarge) { Text("알람 삭제") }
         androidx.compose.foundation.layout.Spacer(Modifier.padding(bottom = 8.dp))
+    }
+}
+
+@Composable
+fun AlarmEditScreenForTest(snoozeEnabled: Boolean, snoozeMinutes: Int) {
+    AlarmSnoozeSettings(
+        snoozeEnabled = snoozeEnabled,
+        snoozeMinutes = snoozeMinutes,
+        onSnoozeEnabledChanged = {},
+        onSnoozeMinutesChanged = {},
+    )
+}
+
+@Composable
+private fun AlarmSnoozeSettings(
+    snoozeEnabled: Boolean,
+    snoozeMinutes: Int,
+    onSnoozeEnabledChanged: (Boolean) -> Unit,
+    onSnoozeMinutesChanged: (Int) -> Unit,
+) {
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text("다시 울림 사용", style = MaterialTheme.typography.titleMedium)
+            Text(
+                "길게 눌러 설정한 시간 뒤 다시 울립니다.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Switch(checked = snoozeEnabled, onCheckedChange = onSnoozeEnabledChanged)
+    }
+    if (snoozeEnabled) {
+        SnoozeMinutesSelector(snoozeMinutes, onSnoozeMinutesChanged)
+    }
+}
+
+@Composable
+private fun SnoozeMinutesSelector(value: Int, onValueChange: (Int) -> Unit) {
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.End) {
+        OutlinedButton(onClick = { onValueChange(value - 1) }, enabled = value > 5) { Text("−") }
+        Text("${value}분", modifier = Modifier.padding(horizontal = 12.dp), style = MaterialTheme.typography.titleMedium)
+        OutlinedButton(onClick = { onValueChange(value + 1) }, enabled = value < 30) { Text("+") }
     }
 }
 

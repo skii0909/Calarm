@@ -15,6 +15,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -25,6 +26,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.unit.dp
 import com.smartworkalarm.domain.model.RepeatDay
 import com.smartworkalarm.presentation.alarmedit.AlarmRingtonePickerField
@@ -52,6 +54,7 @@ fun ShiftTypeEditScreen(
         onTimeChanged = viewModel::onShiftTimeChanged,
         onToggleDay = viewModel::toggleShiftDay,
         onRingtoneChanged = viewModel::onShiftRingtoneChanged,
+        onSnoozeEnabledChanged = viewModel::onShiftSnoozeEnabledChanged,
         onSnoozeChanged = viewModel::onShiftSnoozeChanged,
         onHolidayChanged = viewModel::onShiftHolidayChanged,
         onGradualVolumeChanged = viewModel::onShiftGradualVolumeChanged,
@@ -69,6 +72,7 @@ fun ShiftTypeEditScreen(
     onTimeChanged: (Int, Int) -> Unit = { _, _ -> },
     onToggleDay: (RepeatDay) -> Unit = {},
     onRingtoneChanged: (String?) -> Unit = {},
+    onSnoozeEnabledChanged: (Boolean) -> Unit = {},
     onSnoozeChanged: (Int) -> Unit = {},
     onHolidayChanged: (Boolean) -> Unit = {},
     onGradualVolumeChanged: (Boolean) -> Unit = {},
@@ -120,13 +124,12 @@ fun ShiftTypeEditScreen(
         }
         NightPulseSection("알람음과 다시 울림", "이 근무 형태에 사용할 알람 설정") {
             AlarmRingtonePickerField(state.ringtoneUri, onRingtoneChanged)
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("다시 울림 ${state.snoozeMinutes}분", style = MaterialTheme.typography.titleSmall)
-                Row {
-                    OutlinedButton(onClick = { onSnoozeChanged(state.snoozeMinutes - 1) }, enabled = state.snoozeMinutes > 5) { Text("−") }
-                    OutlinedButton(onClick = { onSnoozeChanged(state.snoozeMinutes + 1) }, enabled = state.snoozeMinutes < 30) { Text("+") }
-                }
-            }
+            ShiftSnoozeSettings(
+                snoozeEnabled = state.snoozeEnabled,
+                snoozeMinutes = state.snoozeMinutes,
+                onSnoozeEnabledChanged = onSnoozeEnabledChanged,
+                onSnoozeChanged = onSnoozeChanged,
+            )
         }
         NightPulseSection("추가 설정") {
             SettingSwitch("공휴일 자동 끄기", state.skipOnPublicHoliday, onHolidayChanged)
@@ -147,6 +150,33 @@ fun ShiftTypeEditScreen(
             dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("취소") } },
             confirmButton = { TextButton(onClick = { confirmDelete = false; onDelete() }) { Text("삭제") } },
         )
+    }
+}
+
+@Composable
+private fun ShiftSnoozeSettings(
+    snoozeEnabled: Boolean,
+    snoozeMinutes: Int,
+    onSnoozeEnabledChanged: (Boolean) -> Unit,
+    onSnoozeChanged: (Int) -> Unit,
+) {
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text("다시 울림 사용", style = MaterialTheme.typography.titleMedium)
+            Text(
+                "길게 눌러 설정한 시간 뒤 다시 울립니다.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Switch(checked = snoozeEnabled, onCheckedChange = onSnoozeEnabledChanged)
+    }
+    if (snoozeEnabled) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.End) {
+            OutlinedButton(onClick = { onSnoozeChanged(snoozeMinutes - 1) }, enabled = snoozeMinutes > 5) { Text("−") }
+            Text("${snoozeMinutes}분", modifier = Modifier.padding(horizontal = 12.dp), style = MaterialTheme.typography.titleMedium)
+            OutlinedButton(onClick = { onSnoozeChanged(snoozeMinutes + 1) }, enabled = snoozeMinutes < 30) { Text("+") }
+        }
     }
 }
 

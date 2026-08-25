@@ -186,7 +186,7 @@ fun ShiftGroupScreen(
 }
 
 @Composable
-private fun ShiftTypeCard(type: ShiftTypeAlarm, onClick: () -> Unit) {
+internal fun ShiftTypeCard(type: ShiftTypeAlarm, onClick: () -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = .55f)),
@@ -198,7 +198,7 @@ private fun ShiftTypeCard(type: ShiftTypeAlarm, onClick: () -> Unit) {
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     FeaturePill("%02d:%02d".format(type.hour, type.minute))
                     if (type.gradualVolume) FeaturePill("점점 크게")
-                    FeaturePill("${type.snoozeMinutes}분 후")
+                    if (type.snoozeEnabled) FeaturePill("${type.snoozeMinutes}분 후")
                 }
             }
             Text("편집")

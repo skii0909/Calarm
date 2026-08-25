@@ -158,7 +158,7 @@ private fun ShiftGroupRow(item: ShiftGroupListItem, onClick: () -> Unit) {
 }
 
 @Composable
-private fun AlarmRow(alarm: Alarm, onEdit: (Long) -> Unit, onEnabled: (Long, Boolean) -> Unit) {
+internal fun AlarmRow(alarm: Alarm, onEdit: (Long) -> Unit, onEnabled: (Long, Boolean) -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth().clickable { onEdit(alarm.id) },
         shape = MaterialTheme.shapes.extraLarge,
@@ -176,7 +176,7 @@ private fun AlarmRow(alarm: Alarm, onEdit: (Long) -> Unit, onEnabled: (Long, Boo
                     if (alarm.skipOnCalendarMatch) FeaturePill("캘린더")
                     if (alarm.skipOnPublicHoliday) FeaturePill("공휴일")
                     if (alarm.gradualVolume) FeaturePill("점점 크게")
-                    FeaturePill("${alarm.snoozeMinutes}분 후")
+                    if (alarm.snoozeEnabled) FeaturePill("${alarm.snoozeMinutes}분 후")
                 }
             }
             Switch(checked = alarm.enabled, onCheckedChange = { onEnabled(alarm.id, it) })
