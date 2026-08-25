@@ -141,12 +141,13 @@ class RingingSessionStateMachineTest {
     private fun key(alarmId: Long) = RingingSessionKey.create(
         isShiftAlarm = true,
         alarmId = alarmId,
-        scheduledOccurrenceAt = Instant.parse("2026-08-25T00:00:00Z"),
+        attemptToken = "attempt-$alarmId",
     )
 
     private fun session(key: RingingSessionKey) = ActiveRingingSession(
         key = key,
         snoozeEnabled = true,
         snoozeMinutes = 11,
+        originalScheduledOccurrenceAt = Instant.parse("2026-08-25T00:00:00Z"),
     )
 }

@@ -1,6 +1,5 @@
 package com.smartworkalarm.alarm
 
-import java.time.Instant
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -11,6 +10,7 @@ class AlarmTerminalResultStoreTest {
         val key = key(7L)
         val store = AlarmTerminalResultStore()
         val result = AlarmTerminalServiceResult(
+            requestId = "request-1",
             sessionKey = key,
             result = TerminalActionResult.SUCCESS,
             message = null,
@@ -18,8 +18,8 @@ class AlarmTerminalResultStoreTest {
 
         store.publish(result)
 
-        assertEquals(result, store.take(key))
-        assertNull(store.take(key))
+        assertEquals(result, store.take("request-1"))
+        assertNull(store.take("request-1"))
     }
 
     @Test
@@ -28,14 +28,15 @@ class AlarmTerminalResultStoreTest {
         val second = key(8L)
         val store = AlarmTerminalResultStore()
         val result = AlarmTerminalServiceResult(
+            requestId = "request-2",
             sessionKey = second,
             result = TerminalActionResult.FAILED,
             message = "예약 실패",
         )
         store.publish(result)
 
-        assertNull(store.take(first))
-        assertEquals(result, store.take(second))
+        assertNull(store.take("request-1"))
+        assertEquals(result, store.take("request-2"))
     }
 
     @Test
@@ -43,17 +44,22 @@ class AlarmTerminalResultStoreTest {
         val key = key(7L)
         val store = AlarmTerminalResultStore()
         store.publish(
-            AlarmTerminalServiceResult(key, TerminalActionResult.REJECTED, "거절"),
+            AlarmTerminalServiceResult(
+                "request-1",
+                key,
+                TerminalActionResult.REJECTED,
+                "거절",
+            ),
         )
 
         store.clear()
 
-        assertNull(store.take(key))
+        assertNull(store.take("request-1"))
     }
 
     private fun key(id: Long) = RingingSessionKey.create(
         isShiftAlarm = false,
         alarmId = id,
-        scheduledOccurrenceAt = Instant.parse("2026-08-25T00:00:00Z"),
+        attemptToken = "attempt-$id",
     )
 }

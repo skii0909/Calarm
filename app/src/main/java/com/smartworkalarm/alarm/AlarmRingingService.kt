@@ -27,6 +27,7 @@ class AlarmRingingService : Service() {
     @Inject lateinit var scheduler: AlarmScheduler
     @Inject lateinit var shiftScheduler: ShiftAlarmScheduler
     @Inject lateinit var clock: Clock
+    @Inject lateinit var attemptTokenFactory: RingingAttemptTokenFactory
     private var player: MediaPlayer? = null
     private val ringingSessionState = RingingSessionStateMachine()
     private val volumeHandler = Handler(Looper.getMainLooper())
@@ -53,8 +54,10 @@ class AlarmRingingService : Service() {
 
     private fun handleDismiss(intent: Intent) {
         val key = intent.ringingSessionKey() ?: return
+        val requestId = intent.terminalRequestId() ?: return
         val result = ringingSessionState.dismiss(key)
         publishTerminalActionResult(
+            requestId = requestId,
             key = key,
             result = result,
             message = if (result == TerminalActionResult.REJECTED) STALE_ACTION_MESSAGE else null,
@@ -64,27 +67,32 @@ class AlarmRingingService : Service() {
 
     private fun handleSnooze(intent: Intent) {
         val key = intent.ringingSessionKey() ?: return
+        val requestId = intent.terminalRequestId() ?: return
         val result = ringingSessionState.requestSnooze(key, ::scheduleSnooze)
         val message = when (result) {
             TerminalActionResult.SUCCESS -> null
             TerminalActionResult.REJECTED -> STALE_ACTION_MESSAGE
             TerminalActionResult.FAILED -> SNOOZE_FAILURE_MESSAGE
         }
-        publishTerminalActionResult(key, result, message)
+        publishTerminalActionResult(requestId, key, result, message)
         if (result == TerminalActionResult.SUCCESS) stopRinging()
     }
 
     private fun startRinging(intent: Intent) {
-        alarmTerminalResultStore.clear()
-        val key = intent.ringingSessionKey() ?: RingingSessionKey.create(
-            alarmId = intent.getLongExtra(AlarmSchedulerImpl.EXTRA_ALARM_ID, -1L),
-            isShiftAlarm = intent.getBooleanExtra(EXTRA_IS_SHIFT_ALARM, false),
-            scheduledOccurrenceAt = intent.scheduledOccurrenceAt(),
+        val alarmId = intent.getLongExtra(AlarmSchedulerImpl.EXTRA_ALARM_ID, -1L)
+        val isShiftAlarm = intent.getBooleanExtra(EXTRA_IS_SHIFT_ALARM, false)
+        if (alarmId < 0L) return
+        val key = resolveStartSessionKey(
+            suppliedKey = intent.ringingSessionKey(),
+            alarmId = alarmId,
+            isShiftAlarm = isShiftAlarm,
+            nextAttemptToken = attemptTokenFactory::next,
         )
         val session = ActiveRingingSession(
             key = key,
             snoozeEnabled = intent.getBooleanExtra(EXTRA_SNOOZE_ENABLED, true),
             snoozeMinutes = intent.getIntExtra(EXTRA_SNOOZE_MINUTES, 5).coerceIn(5, 30),
+            originalScheduledOccurrenceAt = intent.scheduledOccurrenceAt(),
         )
         ringingSessionState.start(session)
         val name = intent.getStringExtra(EXTRA_ALARM_NAME) ?: "알람"
@@ -96,7 +104,7 @@ class AlarmRingingService : Service() {
                 name,
                 session.isShiftAlarm,
                 intent.getBooleanExtra(EXTRA_CALENDAR_WARNING, false),
-                session.scheduledOccurrenceAt,
+                session.originalScheduledOccurrenceAt,
                 session.snoozeEnabled,
                 session.snoozeMinutes,
             ),
@@ -126,7 +134,7 @@ class AlarmRingingService : Service() {
             shiftScheduler.scheduleShiftSnooze(
                 session.alarmId,
                 triggerAt,
-                session.scheduledOccurrenceAt ?: triggerAt,
+                session.originalScheduledOccurrenceAt ?: triggerAt,
             )
         } else {
             scheduler.scheduleSnooze(session.alarmId, triggerAt)
@@ -159,17 +167,19 @@ class AlarmRingingService : Service() {
     }
 
     private fun publishTerminalActionResult(
+        requestId: String,
         key: RingingSessionKey,
         result: TerminalActionResult,
         message: String?,
     ) {
         alarmTerminalResultStore.publish(
-            AlarmTerminalServiceResult(key, result, message),
+            AlarmTerminalServiceResult(requestId, key, result, message),
         )
         sendBroadcast(
             Intent(ACTION_TERMINAL_RESULT)
                 .setPackage(packageName)
                 .apply {
+                    putTerminalRequestId(requestId)
                     putRingingSessionKey(key)
                     putTerminalActionResult(result, message)
                 },
@@ -199,6 +209,7 @@ class AlarmRingingService : Service() {
         const val EXTRA_IS_SHIFT_ALARM = "is_shift_alarm"
         const val EXTRA_CALENDAR_WARNING = "calendar_warning"
         const val EXTRA_RINGING_SESSION_KEY = "ringing_session_key"
+        const val EXTRA_TERMINAL_REQUEST_ID = "terminal_request_id"
         const val EXTRA_TERMINAL_ACTION_RESULT = "terminal_action_result"
         const val EXTRA_TERMINAL_ACTION_MESSAGE = "terminal_action_message"
         private const val NOTIFICATION_ID = 7001

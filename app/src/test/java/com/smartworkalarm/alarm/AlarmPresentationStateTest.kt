@@ -1,6 +1,7 @@
 package com.smartworkalarm.alarm
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Test
 
 class AlarmPresentationStateTest {
@@ -20,7 +21,7 @@ class AlarmPresentationStateTest {
                 ),
                 strings = mapOf(
                     AlarmNotificationFactory.EXTRA_ALARM_NAME to "첫 알람",
-                    AlarmRingingService.EXTRA_RINGING_SESSION_KEY to "regular:11:1111",
+                    AlarmRingingService.EXTRA_RINGING_SESSION_KEY to "v2:regular:11:attempt-a",
                 ),
                 ints = mapOf(AlarmRingingService.EXTRA_SNOOZE_MINUTES to 5),
             ),
@@ -39,7 +40,7 @@ class AlarmPresentationStateTest {
                 ),
                 strings = mapOf(
                     AlarmNotificationFactory.EXTRA_ALARM_NAME to "두 번째 근무 알람",
-                    AlarmRingingService.EXTRA_RINGING_SESSION_KEY to "shift:22:2222",
+                    AlarmRingingService.EXTRA_RINGING_SESSION_KEY to "v2:shift:22:attempt-b",
                 ),
                 ints = mapOf(AlarmRingingService.EXTRA_SNOOZE_MINUTES to 17),
             ),
@@ -50,7 +51,7 @@ class AlarmPresentationStateTest {
                 sessionKey = RingingSessionKey.create(
                     isShiftAlarm = true,
                     alarmId = 22L,
-                    scheduledOccurrenceAt = java.time.Instant.ofEpochMilli(2_222L),
+                    attemptToken = "attempt-b",
                 ),
                 alarmId = 22L,
                 isShiftAlarm = true,
@@ -65,7 +66,7 @@ class AlarmPresentationStateTest {
     }
 
     @Test
-    fun `legacy payload derives the same stable key from alarm identity`() {
+    fun `legacy payload cannot reconstruct an actionable session key`() {
         val presentation = parseAlarmPresentation(
             FakeAlarmPayload(
                 longs = mapOf(
@@ -76,14 +77,8 @@ class AlarmPresentationStateTest {
             ),
         )
 
-        assertEquals(
-            RingingSessionKey.create(
-                isShiftAlarm = true,
-                alarmId = 31L,
-                scheduledOccurrenceAt = java.time.Instant.ofEpochMilli(9_999L),
-            ),
-            presentation.sessionKey,
-        )
+        assertNull(presentation.sessionKey)
+        assertEquals(9_999L, presentation.scheduledOccurrenceAt)
     }
 }
 

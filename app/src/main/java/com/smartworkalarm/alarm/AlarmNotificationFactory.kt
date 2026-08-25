@@ -89,11 +89,5 @@ internal fun applyRingingChannelPolicy(
     setVibrationEnabled(false)
 }
 
-internal fun fullScreenIntentIdentity(alarmId: Long, isShiftAlarm: Boolean): String {
-    return fullScreenIntentIdentity(
-        RingingSessionKey.create(isShiftAlarm, alarmId, scheduledOccurrenceAt = null),
-    )
-}
-
 internal fun fullScreenIntentIdentity(sessionKey: RingingSessionKey): String =
     "smartworkalarm://ringing/${sessionKey.encode()}"

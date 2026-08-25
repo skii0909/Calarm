@@ -6,9 +6,11 @@ import androidx.compose.runtime.setValue
 
 internal data class AlarmTerminalUiState(
     val sessionKey: RingingSessionKey,
-    val actionsEnabled: Boolean = true,
+    val inFlightRequestId: String? = null,
     val persistentError: String? = null,
-)
+) {
+    val actionsEnabled: Boolean get() = inFlightRequestId == null
+}
 
 internal enum class AlarmTerminalUiEffect {
     IGNORE,
@@ -16,51 +18,78 @@ internal enum class AlarmTerminalUiEffect {
     FINISH,
 }
 
-internal class AlarmTerminalActionController(initialKey: RingingSessionKey) {
-    private var gate = TerminalAlarmActionGate()
+internal class AlarmTerminalActionController(initialState: AlarmTerminalUiState) {
+    constructor(initialKey: RingingSessionKey) : this(AlarmTerminalUiState(initialKey))
 
-    var state by mutableStateOf(AlarmTerminalUiState(initialKey))
+    var state by mutableStateOf(initialState)
         private set
 
     @Synchronized
-    fun tryStartRequest(requestedKey: RingingSessionKey): Boolean {
-        if (requestedKey != state.sessionKey || !gate.tryAcquire()) return false
-        state = state.copy(actionsEnabled = false, persistentError = null)
+    fun tryStartRequest(requestedKey: RingingSessionKey, requestId: String): Boolean {
+        if (
+            requestedKey != state.sessionKey ||
+            requestId.isBlank() ||
+            state.inFlightRequestId != null
+        ) {
+            return false
+        }
+        state = state.copy(inFlightRequestId = requestId, persistentError = null)
         return true
     }
 
     @Synchronized
-    fun acceptServiceResult(
-        resultKey: RingingSessionKey,
-        result: TerminalActionResult,
-        message: String?,
-    ): AlarmTerminalUiEffect {
-        if (resultKey != state.sessionKey) return AlarmTerminalUiEffect.IGNORE
-        if (result == TerminalActionResult.SUCCESS) return AlarmTerminalUiEffect.FINISH
+    fun acceptServiceResult(serviceResult: AlarmTerminalServiceResult): AlarmTerminalUiEffect {
+        if (
+            serviceResult.sessionKey != state.sessionKey ||
+            serviceResult.requestId != state.inFlightRequestId
+        ) {
+            return AlarmTerminalUiEffect.IGNORE
+        }
+        if (serviceResult.result == TerminalActionResult.SUCCESS) {
+            state = state.copy(inFlightRequestId = null, persistentError = null)
+            return AlarmTerminalUiEffect.FINISH
+        }
 
-        gate.release()
         state = state.copy(
-            actionsEnabled = true,
-            persistentError = message ?: DEFAULT_ACTION_ERROR,
+            inFlightRequestId = null,
+            persistentError = serviceResult.message ?: DEFAULT_ACTION_ERROR,
         )
         return AlarmTerminalUiEffect.STAY_OPEN
     }
 
     @Synchronized
-    fun acceptDispatchFailure(requestKey: RingingSessionKey, message: String) {
-        if (requestKey != state.sessionKey) return
-        gate.release()
-        state = state.copy(actionsEnabled = true, persistentError = message)
+    fun acceptDispatchFailure(
+        requestKey: RingingSessionKey,
+        requestId: String,
+        message: String,
+    ) {
+        if (requestKey != state.sessionKey || requestId != state.inFlightRequestId) return
+        state = state.copy(inFlightRequestId = null, persistentError = message)
     }
 
     @Synchronized
     fun replaceSession(sessionKey: RingingSessionKey) {
         if (sessionKey == state.sessionKey) return
-        gate = TerminalAlarmActionGate()
         state = AlarmTerminalUiState(sessionKey)
     }
 
     private companion object {
         const val DEFAULT_ACTION_ERROR = "요청을 처리하지 못했습니다. 다시 시도해 주세요."
     }
+}
+
+internal fun restoreAlarmTerminalUiState(
+    initialSessionKey: RingingSessionKey,
+    savedSessionKey: String?,
+    savedInFlightRequestId: String?,
+    savedPersistentError: String?,
+): AlarmTerminalUiState {
+    if (RingingSessionKey.decode(savedSessionKey) != initialSessionKey) {
+        return AlarmTerminalUiState(initialSessionKey)
+    }
+    return AlarmTerminalUiState(
+        sessionKey = initialSessionKey,
+        inFlightRequestId = savedInFlightRequestId?.takeIf { it.isNotBlank() },
+        persistentError = savedPersistentError,
+    )
 }

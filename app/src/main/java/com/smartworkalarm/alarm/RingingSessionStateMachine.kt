@@ -1,15 +1,16 @@
 package com.smartworkalarm.alarm
 
 import com.smartworkalarm.domain.repository.ScheduleResult
+import java.time.Instant
 
 internal data class ActiveRingingSession(
     val key: RingingSessionKey,
     val snoozeEnabled: Boolean,
     val snoozeMinutes: Int,
+    val originalScheduledOccurrenceAt: Instant?,
 ) {
     val alarmId: Long get() = key.alarmId
     val isShiftAlarm: Boolean get() = key.isShiftAlarm
-    val scheduledOccurrenceAt get() = key.scheduledOccurrenceAt
 }
 
 internal enum class TerminalActionResult(val wireValue: String) {

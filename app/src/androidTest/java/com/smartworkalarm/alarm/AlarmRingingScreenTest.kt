@@ -15,7 +15,6 @@ import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipe
 import androidx.compose.ui.text.TextLayoutResult
-import java.time.Instant
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -331,7 +330,7 @@ class AlarmRingingScreenTest {
         sessionKey = RingingSessionKey.create(
             isShiftAlarm = false,
             alarmId = id,
-            scheduledOccurrenceAt = Instant.ofEpochMilli(1_000L + id),
+            attemptToken = "screen-attempt-$id",
         ),
         alarmId = id,
         alarmName = "알람 $id",

@@ -17,27 +17,31 @@ import androidx.compose.runtime.setValue
 import androidx.core.content.ContextCompat
 import com.smartworkalarm.presentation.theme.WorkAlarmTheme
 import dagger.hilt.android.AndroidEntryPoint
-import java.time.Instant
 
 @AndroidEntryPoint
 class AlarmActivity : ComponentActivity() {
     private val presentationState = AlarmPresentationState()
     private lateinit var terminalActionController: AlarmTerminalActionController
+    private lateinit var terminalResultRouter: AlarmTerminalResultRouter
     private var terminalResultReceiverRegistered = false
     private val terminalResultReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             if (intent?.action != AlarmRingingService.ACTION_TERMINAL_RESULT) return
+            val requestId = intent.terminalRequestId() ?: return
             val resultKey = intent.ringingSessionKey() ?: return
             val result = intent.terminalActionResult() ?: return
-            val serviceResult = alarmTerminalResultStore.take(resultKey)
-                ?: AlarmTerminalServiceResult(
-                    sessionKey = resultKey,
-                    result = result,
-                    message = intent.getStringExtra(
-                        AlarmRingingService.EXTRA_TERMINAL_ACTION_MESSAGE,
+            acceptServiceEffect(
+                terminalResultRouter.acceptBroadcast(
+                    AlarmTerminalServiceResult(
+                        requestId = requestId,
+                        sessionKey = resultKey,
+                        result = result,
+                        message = intent.getStringExtra(
+                            AlarmRingingService.EXTRA_TERMINAL_ACTION_MESSAGE,
+                        ),
                     ),
-                )
-            acceptServiceResult(serviceResult)
+                ),
+            )
         }
     }
 
@@ -65,7 +69,18 @@ class AlarmActivity : ComponentActivity() {
             finish()
             return
         }
-        terminalActionController = AlarmTerminalActionController(initialSessionKey)
+        terminalActionController = AlarmTerminalActionController(
+            restoreAlarmTerminalUiState(
+                initialSessionKey = initialSessionKey,
+                savedSessionKey = savedInstanceState?.getString(STATE_TERMINAL_SESSION_KEY),
+                savedInFlightRequestId = savedInstanceState?.getString(STATE_TERMINAL_REQUEST_ID),
+                savedPersistentError = savedInstanceState?.getString(STATE_TERMINAL_ERROR),
+            ),
+        )
+        terminalResultRouter = AlarmTerminalResultRouter(
+            terminalActionController,
+            alarmTerminalResultStore,
+        )
         ContextCompat.registerReceiver(
             this,
             terminalResultReceiver,
@@ -73,7 +88,7 @@ class AlarmActivity : ComponentActivity() {
             ContextCompat.RECEIVER_NOT_EXPORTED,
         )
         terminalResultReceiverRegistered = true
-        alarmTerminalResultStore.take(initialSessionKey)?.let(::acceptServiceResult)
+        acceptServiceEffect(terminalResultRouter.acceptStoredResult())
         if (isFinishing) return
         setContent {
             val presentation = presentationState.current
@@ -104,10 +119,12 @@ class AlarmActivity : ComponentActivity() {
 
     private fun send(action: String, presentation: AlarmPresentation) {
         val sessionKey = presentation.sessionKey ?: return
-        if (!terminalActionController.tryStartRequest(sessionKey)) return
+        val requestId = newTerminalRequestId()
+        if (!terminalActionController.tryStartRequest(sessionKey, requestId)) return
 
         val serviceIntent = Intent(this, AlarmRingingService::class.java).apply {
             this.action = action
+            putTerminalRequestId(requestId)
             putRingingSessionKey(sessionKey)
             putExtra(AlarmSchedulerImpl.EXTRA_ALARM_ID, presentation.alarmId)
             putExtra(AlarmRingingService.EXTRA_IS_SHIFT_ALARM, presentation.isShiftAlarm)
@@ -127,24 +144,35 @@ class AlarmActivity : ComponentActivity() {
         } catch (error: RuntimeException) {
             terminalActionController.acceptDispatchFailure(
                 sessionKey,
+                requestId,
                 "알람 서비스에 요청을 보내지 못했습니다. 다시 시도해 주세요.",
             )
         }
     }
 
-    private fun acceptServiceResult(serviceResult: AlarmTerminalServiceResult) {
-        when (
-            terminalActionController.acceptServiceResult(
-                resultKey = serviceResult.sessionKey,
-                result = serviceResult.result,
-                message = serviceResult.message,
-            )
-        ) {
+    private fun acceptServiceEffect(effect: AlarmTerminalUiEffect) {
+        when (effect) {
             AlarmTerminalUiEffect.FINISH -> finish()
             AlarmTerminalUiEffect.IGNORE,
             AlarmTerminalUiEffect.STAY_OPEN,
             -> Unit
         }
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        if (!::terminalActionController.isInitialized) {
+            super.onSaveInstanceState(outState)
+            return
+        }
+        val terminalState = terminalActionController.state
+        outState.putString(STATE_TERMINAL_SESSION_KEY, terminalState.sessionKey.encode())
+        terminalState.inFlightRequestId?.let {
+            outState.putString(STATE_TERMINAL_REQUEST_ID, it)
+        }
+        terminalState.persistentError?.let {
+            outState.putString(STATE_TERMINAL_ERROR, it)
+        }
+        super.onSaveInstanceState(outState)
     }
 
     override fun onDestroy() {
@@ -158,6 +186,9 @@ class AlarmActivity : ComponentActivity() {
     companion object {
         private const val ACTION_SNOOZE = AlarmRingingService.ACTION_SNOOZE
         private const val ACTION_DISMISS = AlarmRingingService.ACTION_DISMISS
+        private const val STATE_TERMINAL_SESSION_KEY = "terminal_session_key"
+        private const val STATE_TERMINAL_REQUEST_ID = "terminal_request_id"
+        private const val STATE_TERMINAL_ERROR = "terminal_error"
     }
 }
 
@@ -196,19 +227,7 @@ internal fun parseAlarmPresentation(payload: AlarmPayload): AlarmPresentation {
         Long.MIN_VALUE,
     )
     val encodedSessionKey = payload.getString(AlarmRingingService.EXTRA_RINGING_SESSION_KEY)
-    val sessionKey = RingingSessionKey.decode(encodedSessionKey) ?: if (
-        encodedSessionKey == null && alarmId >= 0L
-    ) {
-        RingingSessionKey.create(
-            isShiftAlarm = isShiftAlarm,
-            alarmId = alarmId,
-            scheduledOccurrenceAt = scheduledOccurrenceAt
-                .takeIf { it != Long.MIN_VALUE }
-                ?.let(Instant::ofEpochMilli),
-        )
-    } else {
-        null
-    }
+    val sessionKey = RingingSessionKey.decode(encodedSessionKey)
     return AlarmPresentation(
         sessionKey = sessionKey,
         alarmId = alarmId,

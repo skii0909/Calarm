@@ -9,6 +9,7 @@ import javax.inject.Inject
 
 class AlarmRingerImpl @Inject constructor(
     @param:ApplicationContext private val context: Context,
+    private val attemptTokenFactory: RingingAttemptTokenFactory,
 ) : AlarmRinger {
     override fun start(
         alarmId: Long,
@@ -90,7 +91,7 @@ class AlarmRingerImpl @Inject constructor(
         val sessionKey = RingingSessionKey.create(
             isShiftAlarm = isShiftAlarm,
             alarmId = alarmId,
-            scheduledOccurrenceAt = scheduledOccurrenceAt,
+            attemptToken = attemptTokenFactory.next(),
         )
         ContextCompat.startForegroundService(
             context,

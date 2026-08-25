@@ -1,6 +1,5 @@
 package com.smartworkalarm.alarm
 
-import java.time.Instant
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
@@ -30,26 +29,26 @@ class AlarmNotificationPolicyTest {
         assertEquals(firstId.hashCode(), collidingId.hashCode())
 
         assertNotEquals(
-            fullScreenIntentIdentity(firstId, isShiftAlarm = false),
-            fullScreenIntentIdentity(collidingId, isShiftAlarm = false),
+            fullScreenIntentIdentity(RingingSessionKey.create(false, firstId, "attempt-a")),
+            fullScreenIntentIdentity(RingingSessionKey.create(false, collidingId, "attempt-a")),
         )
         assertNotEquals(
-            fullScreenIntentIdentity(firstId, isShiftAlarm = false),
-            fullScreenIntentIdentity(firstId, isShiftAlarm = true),
+            fullScreenIntentIdentity(RingingSessionKey.create(false, firstId, "attempt-a")),
+            fullScreenIntentIdentity(RingingSessionKey.create(true, firstId, "attempt-a")),
         )
     }
 
     @Test
-    fun `full screen intent identity separates scheduled occurrences of one alarm`() {
+    fun `full screen intent identity separates ringing attempts of one alarm`() {
         val first = RingingSessionKey.create(
             isShiftAlarm = false,
             alarmId = 7L,
-            scheduledOccurrenceAt = Instant.parse("2026-08-25T00:00:00Z"),
+            attemptToken = "attempt-a",
         )
         val second = RingingSessionKey.create(
             isShiftAlarm = false,
             alarmId = 7L,
-            scheduledOccurrenceAt = Instant.parse("2026-08-26T00:00:00Z"),
+            attemptToken = "attempt-b",
         )
 
         assertNotEquals(fullScreenIntentIdentity(first), fullScreenIntentIdentity(second))

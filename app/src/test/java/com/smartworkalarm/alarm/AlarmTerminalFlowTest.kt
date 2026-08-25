@@ -12,21 +12,23 @@ class AlarmTerminalFlowTest {
         val session = session()
         val serviceState = RingingSessionStateMachine().apply { start(session) }
         val activityState = AlarmTerminalActionController(session.key)
-        assertTrue(activityState.tryStartRequest(session.key))
+        assertTrue(activityState.tryStartRequest(session.key, "request-1"))
 
         val failed = serviceState.requestSnooze(session.key) {
             ScheduleResult.ExactAlarmPermissionRequired
         }
         assertEquals(
             AlarmTerminalUiEffect.STAY_OPEN,
-            activityState.acceptServiceResult(session.key, failed, "권한을 확인해 주세요"),
+            activityState.acceptServiceResult(
+                result("request-1", session.key, failed, "권한을 확인해 주세요"),
+            ),
         )
-        assertTrue(activityState.tryStartRequest(session.key))
+        assertTrue(activityState.tryStartRequest(session.key, "request-2"))
 
         val success = serviceState.requestSnooze(session.key) { ScheduleResult.Scheduled }
         assertEquals(
             AlarmTerminalUiEffect.FINISH,
-            activityState.acceptServiceResult(session.key, success, null),
+            activityState.acceptServiceResult(result("request-2", session.key, success)),
         )
     }
 
@@ -35,19 +37,21 @@ class AlarmTerminalFlowTest {
         val session = session()
         val serviceState = RingingSessionStateMachine().apply { start(session) }
         val activityState = AlarmTerminalActionController(session.key)
-        assertTrue(activityState.tryStartRequest(session.key))
+        assertTrue(activityState.tryStartRequest(session.key, "request-1"))
 
         val failed = serviceState.requestSnooze(session.key) { error("scheduler") }
         assertEquals(
             AlarmTerminalUiEffect.STAY_OPEN,
-            activityState.acceptServiceResult(session.key, failed, "예약하지 못했습니다"),
+            activityState.acceptServiceResult(
+                result("request-1", session.key, failed, "예약하지 못했습니다"),
+            ),
         )
-        assertTrue(activityState.tryStartRequest(session.key))
+        assertTrue(activityState.tryStartRequest(session.key, "request-2"))
 
         val success = serviceState.dismiss(session.key)
         assertEquals(
             AlarmTerminalUiEffect.FINISH,
-            activityState.acceptServiceResult(session.key, success, null),
+            activityState.acceptServiceResult(result("request-2", session.key, success)),
         )
     }
 
@@ -55,9 +59,17 @@ class AlarmTerminalFlowTest {
         key = RingingSessionKey.create(
             isShiftAlarm = false,
             alarmId = 7L,
-            scheduledOccurrenceAt = Instant.parse("2026-08-25T00:00:00Z"),
+            attemptToken = "attempt-a",
         ),
         snoozeEnabled = true,
         snoozeMinutes = 11,
+        originalScheduledOccurrenceAt = Instant.parse("2026-08-25T00:00:00Z"),
     )
+
+    private fun result(
+        requestId: String,
+        key: RingingSessionKey,
+        result: TerminalActionResult,
+        message: String? = null,
+    ) = AlarmTerminalServiceResult(requestId, key, result, message)
 }
