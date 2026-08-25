@@ -15,6 +15,7 @@ class AlarmSchedulerImpl @Inject constructor(
     @param:ApplicationContext private val context: Context,
     private val alarmManager: AlarmManager,
     private val permission: ExactAlarmPermission,
+    private val auditStore: AlarmScheduleAuditStore,
 ) : AlarmScheduler, ShiftAlarmScheduler {
     override fun schedule(alarmId: Long, triggerAt: Instant): ScheduleResult =
         scheduleExact(alarmId, triggerAt, snooze = false)
@@ -24,7 +25,9 @@ class AlarmSchedulerImpl @Inject constructor(
 
     override fun cancel(alarmId: Long) {
         alarmManager.cancel(pendingIntent(alarmId, snooze = false, Instant.EPOCH))
+        auditStore.recordCancelled(regularAuditKey(alarmId, snooze = false))
         alarmManager.cancel(pendingIntent(alarmId, snooze = true, Instant.EPOCH))
+        auditStore.recordCancelled(regularAuditKey(alarmId, snooze = true))
     }
 
     override fun scheduleShift(shiftTypeId: Long, triggerAt: Instant): ScheduleResult =
@@ -38,7 +41,9 @@ class AlarmSchedulerImpl @Inject constructor(
 
     override fun cancelShift(shiftTypeId: Long) {
         alarmManager.cancel(shiftPendingIntent(shiftTypeId, snooze = false, Instant.EPOCH))
+        auditStore.recordCancelled(shiftAuditKey(shiftTypeId, snooze = false))
         alarmManager.cancel(shiftPendingIntent(shiftTypeId, snooze = true, Instant.EPOCH))
+        auditStore.recordCancelled(shiftAuditKey(shiftTypeId, snooze = true))
     }
 
     private fun scheduleExact(alarmId: Long, triggerAt: Instant, snooze: Boolean): ScheduleResult {
@@ -48,6 +53,7 @@ class AlarmSchedulerImpl @Inject constructor(
             triggerAt.toEpochMilli(),
             pendingIntent(alarmId, snooze, triggerAt),
         )
+        auditStore.recordScheduled(regularAuditKey(alarmId, snooze), triggerAt)
         return ScheduleResult.Scheduled
     }
 
@@ -63,8 +69,15 @@ class AlarmSchedulerImpl @Inject constructor(
             triggerAt.toEpochMilli(),
             shiftPendingIntent(shiftTypeId, snooze, scheduledOccurrenceAt),
         )
+        auditStore.recordScheduled(shiftAuditKey(shiftTypeId, snooze), triggerAt)
         return ScheduleResult.Scheduled
     }
+
+    private fun regularAuditKey(alarmId: Long, snooze: Boolean): String =
+        "regular:$alarmId" + if (snooze) SNOOZE_AUDIT_SUFFIX else ""
+
+    private fun shiftAuditKey(shiftTypeId: Long, snooze: Boolean): String =
+        "shift:$shiftTypeId" + if (snooze) SNOOZE_AUDIT_SUFFIX else ""
 
     private fun pendingIntent(
         alarmId: Long,
@@ -116,5 +129,6 @@ class AlarmSchedulerImpl @Inject constructor(
         private const val SNOOZE_REQUEST_OFFSET = 1_000_000
         private const val SHIFT_REQUEST_OFFSET = 2_000_000
         private const val SHIFT_SNOOZE_REQUEST_OFFSET = 3_000_000
+        private const val SNOOZE_AUDIT_SUFFIX = ":snooze"
     }
 }

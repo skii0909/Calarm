@@ -3,8 +3,10 @@ package com.smartworkalarm.di
 import android.app.AlarmManager
 import android.content.Context
 import com.smartworkalarm.alarm.AlarmSchedulerImpl
+import com.smartworkalarm.alarm.AlarmScheduleAuditStore
 import com.smartworkalarm.alarm.AlarmRinger
 import com.smartworkalarm.alarm.AlarmRingerImpl
+import com.smartworkalarm.alarm.SharedPreferencesAlarmScheduleAuditStore
 import com.smartworkalarm.domain.usecase.SaveAlarmUseCase
 import com.smartworkalarm.presentation.alarmedit.AlarmSaver
 import com.smartworkalarm.domain.repository.AlarmScheduler
@@ -18,6 +20,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import java.time.Clock
 import java.time.ZoneId
+import javax.inject.Singleton
 
 @Module
 @InstallIn(SingletonComponent::class)
@@ -38,6 +41,16 @@ abstract class AlarmBindings {
 @Module
 @InstallIn(SingletonComponent::class)
 object AlarmModule {
+    @Provides
+    @Singleton
+    fun provideAlarmScheduleAuditStore(
+        @ApplicationContext context: Context,
+        clock: Clock,
+    ): AlarmScheduleAuditStore = SharedPreferencesAlarmScheduleAuditStore(
+        preferences = context.getSharedPreferences("alarm_schedule_audit", Context.MODE_PRIVATE),
+        clock = clock,
+    )
+
     @Provides
     fun provideAlarmManager(@ApplicationContext context: Context): AlarmManager =
         context.getSystemService(AlarmManager::class.java)
