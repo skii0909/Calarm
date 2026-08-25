@@ -74,6 +74,30 @@ class AlarmEditViewModelTest {
         assertEquals(12, saved.snoozeMinutes)
     }
 
+    @Test
+    fun `saving an existing alarm preserves disabled snooze after an unrelated edit`() = runTest(dispatcher) {
+        val existing = Alarm(
+            id = 7,
+            name = "출근",
+            hour = 7,
+            minute = 0,
+            repeatDaysMask = RepeatDay.MONDAY.bit,
+            enabled = true,
+            skipOnCalendarMatch = true,
+            snoozeEnabled = false,
+        )
+        val saver = FakeSaver()
+        val viewModel = viewModelWith(saver, existing)
+
+        viewModel.load(existing.id)
+        advanceUntilIdle()
+        viewModel.onNameChanged("조기 출근")
+        viewModel.save()
+        advanceUntilIdle()
+
+        assertEquals(false, saver.saved.single().snoozeEnabled)
+    }
+
     private class FakeSaver : AlarmSaver {
         val saved = mutableListOf<Alarm>()
         override suspend fun save(alarm: Alarm): Result<Long> {
@@ -82,10 +106,10 @@ class AlarmEditViewModelTest {
         }
     }
 
-    private fun viewModelWith(saver: AlarmSaver): AlarmEditViewModel {
+    private fun viewModelWith(saver: AlarmSaver, existing: Alarm? = null): AlarmEditViewModel {
         val repository = object : AlarmRepository {
             override fun observeAll() = kotlinx.coroutines.flow.emptyFlow<List<Alarm>>()
-            override suspend fun getById(id: Long) = null
+            override suspend fun getById(id: Long) = existing?.takeIf { it.id == id }
             override suspend fun getEnabled() = emptyList<Alarm>()
             override suspend fun upsert(alarm: Alarm) = 0L
             override suspend fun delete(id: Long) = Unit

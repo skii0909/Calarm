@@ -27,6 +27,7 @@ data class AlarmEditState(
     val ringtoneUri: String? = null,
     val skipOnPublicHoliday: Boolean = false,
     val gradualVolume: Boolean = false,
+    val snoozeEnabled: Boolean = true,
     val snoozeMinutes: Int = 5,
     val nameError: String? = null,
     val repeatDaysError: String? = null,
@@ -58,6 +59,7 @@ class AlarmEditViewModel @Inject constructor(
                     ringtoneUri = alarm.ringtoneUri,
                     skipOnPublicHoliday = alarm.skipOnPublicHoliday,
                     gradualVolume = alarm.gradualVolume,
+                    snoozeEnabled = alarm.snoozeEnabled,
                     snoozeMinutes = alarm.snoozeMinutes,
                 )
             }
@@ -109,7 +111,7 @@ class AlarmEditViewModel @Inject constructor(
         ringtoneUri = ringtoneUri,
         skipOnPublicHoliday = skipOnPublicHoliday,
         gradualVolume = gradualVolume,
-        snoozeEnabled = true,
+        snoozeEnabled = snoozeEnabled,
         snoozeMinutes = snoozeMinutes.coerceIn(5, 30),
     )
 

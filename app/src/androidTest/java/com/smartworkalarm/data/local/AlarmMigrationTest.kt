@@ -111,8 +111,8 @@ class AlarmMigrationTest {
         helper.createDatabase(TEST_DB, 5).apply {
             execSQL(
                 "INSERT INTO alarms (id,name,hour,minute,repeat_days_mask,enabled,skip_on_vacation," +
-                    "calendar_keywords,ringtone_uri,skip_on_public_holiday,gradual_volume,snooze_minutes) " +
-                    "VALUES (1,'아침',7,0,31,1,1,'휴가',NULL,0,0,9)",
+                    "calendar_keywords,ringtone_uri,skip_on_public_holiday,gradual_volume,snooze_minutes,created_at) " +
+                    "VALUES (1,'아침',7,0,31,1,1,'휴가',NULL,0,0,9,123)",
             )
             execSQL("INSERT INTO shift_alarm_groups (id,name,enabled,emergency_shift_type_id,is_draft) VALUES (1,'교대',1,NULL,0)")
             execSQL(

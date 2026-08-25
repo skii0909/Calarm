@@ -53,6 +53,7 @@ data class ShiftTypeEditState(
     val enabled: Boolean = true,
     val ringtoneUri: String? = null,
     val gradualVolume: Boolean = false,
+    val snoozeEnabled: Boolean = true,
     val snoozeMinutes: Int = 5,
     val skipOnPublicHoliday: Boolean = false,
     val nameError: String? = null,
@@ -276,7 +277,7 @@ class ShiftGroupEditViewModel @Inject constructor(
         enabled = enabled,
         ringtoneUri = ringtoneUri,
         gradualVolume = gradualVolume,
-        snoozeEnabled = true,
+        snoozeEnabled = snoozeEnabled,
         snoozeMinutes = snoozeMinutes,
         skipOnPublicHoliday = skipOnPublicHoliday,
     )
@@ -292,6 +293,7 @@ class ShiftGroupEditViewModel @Inject constructor(
         enabled = enabled,
         ringtoneUri = ringtoneUri,
         gradualVolume = gradualVolume,
+        snoozeEnabled = snoozeEnabled,
         snoozeMinutes = snoozeMinutes,
         skipOnPublicHoliday = skipOnPublicHoliday,
     )

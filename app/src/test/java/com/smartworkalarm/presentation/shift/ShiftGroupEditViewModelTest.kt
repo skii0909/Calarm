@@ -190,6 +190,23 @@ class ShiftGroupEditViewModelTest {
     }
 
     @Test
+    fun `saving an existing shift type preserves disabled snooze after an unrelated edit`() = runTest(dispatcher) {
+        val disabledSnoozeType = type(1, "주간", listOf("주간")).copy(snoozeEnabled = false)
+        val repository = FakeShiftRepository(
+            groupWithTypes(types = listOf(disabledSnoozeType, type(2, "야간", listOf("야간")))),
+        )
+        val viewModel = viewModel(repository)
+
+        viewModel.loadShiftType(groupId = 10, shiftTypeId = disabledSnoozeType.id)
+        advanceUntilIdle()
+        viewModel.onShiftTypeNameChanged("이른 주간")
+        viewModel.saveShiftType()
+        advanceUntilIdle()
+
+        assertEquals(false, repository.savedTypes.single().snoozeEnabled)
+    }
+
+    @Test
     fun `loading group evaluates todays calendar status`() = runTest(dispatcher) {
         val repository = FakeShiftRepository(groupWithTypes())
         val source = eventSource(
