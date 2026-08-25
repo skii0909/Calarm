@@ -126,7 +126,7 @@ internal fun AlarmRingingScreen(
             ) {
                 AlarmIdentityZone(
                     presentation = presentation,
-                    modifier = Modifier.weight(if (presentation.snoozeEnabled) 1f else 1.15f),
+                    modifier = Modifier.weight(if (presentation.snoozeEnabled) 0.82f else 0.72f),
                 )
                 persistentError?.let { message ->
                     Text(
@@ -144,7 +144,7 @@ internal fun AlarmRingingScreen(
                         snoozeMinutes = presentation.snoozeMinutes,
                         actionsEnabled = actionsEnabled,
                         onSnooze = onSnooze,
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier.weight(0.48f),
                     )
                 }
                 DragToDismissZone(
@@ -152,7 +152,7 @@ internal fun AlarmRingingScreen(
                     actionsEnabled = actionsEnabled,
                     thresholdPx = dismissThresholdPx,
                     onDismiss = onDismiss,
-                    modifier = Modifier.weight(if (presentation.snoozeEnabled) 1.15f else 1.85f),
+                    modifier = Modifier.weight(if (presentation.snoozeEnabled) 1.7f else 2.15f),
                 )
             }
         }
@@ -260,7 +260,7 @@ private fun HoldToSnoozeZone(
         shape = RoundedCornerShape(28.dp),
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 8.dp, vertical = 10.dp)
+            .padding(horizontal = 20.dp, vertical = 4.dp)
             .alpha(if (actionsEnabled) 1f else 0.55f)
             .testTag(SNOOZE_HOLD_TAG)
             .semantics(mergeDescendants = true) {
@@ -291,14 +291,14 @@ private fun HoldToSnoozeZone(
         Row(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 24.dp, vertical = 14.dp),
+                .padding(horizontal = 22.dp, vertical = 8.dp),
             horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Box(contentAlignment = Alignment.Center) {
                 CircularProgressIndicator(
                     progress = { holdProgress },
-                    modifier = Modifier.size(72.dp),
+                    modifier = Modifier.size(54.dp),
                     color = AlarmMint,
                     trackColor = Color.White.copy(alpha = 0.12f),
                     strokeWidth = 6.dp,
@@ -307,18 +307,18 @@ private fun HoldToSnoozeZone(
                 Text(
                     text = "${(holdProgress * 3f).roundToInt().coerceIn(0, 3)}",
                     color = Color.White,
-                    fontSize = 22.sp,
+                    fontSize = 18.sp,
                     fontWeight = FontWeight.Bold,
                 )
             }
             Column(
-                modifier = Modifier.padding(start = 20.dp),
+                modifier = Modifier.padding(start = 16.dp),
                 verticalArrangement = Arrangement.Center,
             ) {
                 Text(
                     text = "${clampedMinutes}분 후 다시 울림",
                     color = Color.White,
-                    fontSize = 20.sp,
+                    fontSize = 18.sp,
                     fontWeight = FontWeight.Bold,
                 )
                 Text(
@@ -382,7 +382,7 @@ private fun DragToDismissZone(
 
         Box(
             modifier = Modifier
-                .size(260.dp)
+                .size(310.dp)
                 .drawBehind {
                     repeat(3) { index ->
                         val phase = if (animationsDisabled) {
@@ -413,7 +413,7 @@ private fun DragToDismissZone(
                             y = dragOffset.y.roundToInt(),
                         )
                     }
-                    .size(156.dp)
+                    .size(196.dp)
                     .alpha(if (actionsEnabled) 1f else 0.55f)
                     .background(
                         Brush.radialGradient(
@@ -487,7 +487,7 @@ private fun DragToDismissZone(
                     Text(
                         text = "알람 해제",
                         color = Color(0xFF06101C),
-                        fontSize = 21.sp,
+                        fontSize = 29.sp,
                         fontWeight = FontWeight.ExtraBold,
                         textAlign = TextAlign.Center,
                     )

@@ -20,7 +20,9 @@ import java.time.ZoneId
 import javax.inject.Inject
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.flow.stateIn
 
 data class ShiftGroupListItem(
@@ -54,8 +56,12 @@ class ShiftGroupListViewModel @Inject constructor(
     private val zoneId: ZoneId,
     private val connectionRepository: CalendarConnectionRepository,
 ) : ViewModel() {
-    val groups: StateFlow<List<ShiftGroupListItem>> = repository.observeGroupsWithTypes()
-        .map { aggregates ->
+    private val refreshVersion = MutableStateFlow(0L)
+
+    val groups: StateFlow<List<ShiftGroupListItem>> = combine(
+        repository.observeGroupsWithTypes(),
+        refreshVersion,
+    ) { aggregates, _ ->
             val now = clock.instant()
             val today = now.atZone(zoneId).toLocalDate()
             val eventsByDate = (0L..7L).associate { offset ->
@@ -83,6 +89,10 @@ class ShiftGroupListViewModel @Inject constructor(
             }
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    fun refresh() {
+        refreshVersion.update { it + 1L }
+    }
 
     private fun nextAlarm(statuses: Map<LocalDate, ShiftGroupDayStatus>, now: Instant): ShiftGroupNextAlarm? =
         statuses.mapNotNull { (date, status) ->

@@ -19,9 +19,15 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -37,6 +43,9 @@ import com.smartworkalarm.presentation.shift.ShiftGroupListViewModel
 import com.smartworkalarm.presentation.shift.shiftStatusText
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import java.util.Locale
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 @Composable
 fun AlarmListScreen(
@@ -49,8 +58,43 @@ fun AlarmListScreen(
     onSettings: () -> Unit,
 ) {
     val alarms by viewModel.alarms.collectAsState()
+    val nextRegular by viewModel.nextRegularAlarm.collectAsState()
     val shiftGroups by shiftViewModel.groups.collectAsState()
+    val nextAlarm = selectNextAlarmCard(nextRegular, shiftGroups.mapNotNull { it.nextAlarm })
 
+    AlarmListScaffold(
+        alarms = alarms,
+        shiftGroups = shiftGroups,
+        nextAlarm = nextAlarm,
+        onRefresh = {
+            viewModel.refresh()
+            shiftViewModel.refresh()
+        },
+        onAdd = onAdd,
+        onEdit = onEdit,
+        onAddShiftGroup = onAddShiftGroup,
+        onEditShiftGroup = onEditShiftGroup,
+        onSettings = onSettings,
+        onEnabled = viewModel::setEnabled,
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AlarmListScaffold(
+    alarms: List<Alarm>,
+    shiftGroups: List<ShiftGroupListItem>,
+    nextAlarm: NextAlarmCardItem?,
+    onRefresh: () -> Unit,
+    onAdd: () -> Unit,
+    onEdit: (Long) -> Unit,
+    onAddShiftGroup: () -> Unit,
+    onEditShiftGroup: (Long) -> Unit,
+    onSettings: () -> Unit,
+    onEnabled: (Long, Boolean) -> Unit,
+) {
+    var refreshing by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         floatingActionButton = {
@@ -59,10 +103,22 @@ fun AlarmListScreen(
             }
         },
     ) { padding ->
-        LazyColumn(
-            modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 18.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+        PullToRefreshBox(
+            isRefreshing = refreshing,
+            onRefresh = {
+                refreshing = true
+                onRefresh()
+                scope.launch {
+                    delay(450)
+                    refreshing = false
+                }
+            },
+            modifier = Modifier.fillMaxSize().padding(padding),
         ) {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize().padding(horizontal = 18.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
             item {
                 Row(Modifier.fillMaxWidth().padding(top = 10.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                     Column(modifier = Modifier.weight(1f)) {
@@ -72,13 +128,18 @@ fun AlarmListScreen(
                     Button(onClick = onSettings, shape = MaterialTheme.shapes.extraLarge) { Text("도움말 · 설정") }
                 }
             }
-            alarms.firstOrNull { it.enabled }?.let { next ->
+            nextAlarm?.let { next ->
                 item {
                     GradientHero {
                         Text("NEXT ALARM", style = MaterialTheme.typography.labelLarge, color = Color.White.copy(alpha = .75f))
-                        Text("%02d:%02d".format(next.hour, next.minute), style = MaterialTheme.typography.displayMedium, color = Color.White)
+                        val zoned = next.triggerAt.atZone(ZoneId.systemDefault())
+                        Text("%02d:%02d".format(zoned.hour, zoned.minute), style = MaterialTheme.typography.displayMedium, color = Color.White)
                         Text(next.name, style = MaterialTheme.typography.titleLarge, color = Color.White)
-                        Text(repeatSummary(next.repeatDaysMask), color = Color.White.copy(alpha = .85f))
+                        Text(
+                            DateTimeFormatter.ofPattern("M월 d일 (E) · ", Locale.KOREAN).format(zoned) +
+                                if (next.isShift) "교대 알람" else "일반 알람",
+                            color = Color.White.copy(alpha = .85f),
+                        )
                     }
                 }
             }
@@ -113,8 +174,10 @@ fun AlarmListScreen(
                 }
             }
             items(alarms, key = { it.id }) { alarm ->
-                AlarmRow(alarm, onEdit, viewModel::setEnabled)
+                AlarmRow(alarm, onEdit, onEnabled)
             }
+            item { Spacer(Modifier.height(88.dp)) }
+        }
         }
     }
 }

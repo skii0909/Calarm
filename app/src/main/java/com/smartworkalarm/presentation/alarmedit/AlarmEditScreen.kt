@@ -38,6 +38,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
@@ -52,10 +54,18 @@ import com.smartworkalarm.presentation.components.DayToggle
 @Composable
 fun AlarmEditScreen(viewModel: AlarmEditViewModel, alarmId: Long, onDone: () -> Unit) {
     val state by viewModel.state.collectAsState()
+    val scrollState = rememberScrollState()
+    val nameFocusRequester = remember { FocusRequester() }
     LaunchedEffect(alarmId) { viewModel.load(alarmId) }
     LaunchedEffect(state.saved) { if (state.saved) onDone() }
+    LaunchedEffect(state.nameError) {
+        if (state.nameError != null) {
+            scrollState.animateScrollTo(0)
+            nameFocusRequester.requestFocus()
+        }
+    }
     Column(
-        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 18.dp, vertical = 10.dp),
+        modifier = Modifier.fillMaxSize().verticalScroll(scrollState).padding(horizontal = 18.dp, vertical = 10.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         Text(if (alarmId == 0L) "새 알람" else "알람 편집", style = MaterialTheme.typography.headlineSmall)
@@ -70,7 +80,7 @@ fun AlarmEditScreen(viewModel: AlarmEditViewModel, alarmId: Long, onDone: () -> 
                 label = { Text("알람 이름") },
                 isError = state.nameError != null,
                 supportingText = { state.nameError?.let { Text(it) } },
-                modifier = Modifier.fillMaxWidth(), colors = readableTextFieldColors(),
+                modifier = Modifier.fillMaxWidth().focusRequester(nameFocusRequester), colors = readableTextFieldColors(),
             )
             Text("반복 요일", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
