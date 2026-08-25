@@ -18,6 +18,13 @@ import androidx.core.content.ContextCompat
 import com.smartworkalarm.presentation.theme.WorkAlarmTheme
 import dagger.hilt.android.AndroidEntryPoint
 
+internal typealias AlarmTerminalCommandDispatcher = (Context, Intent) -> Unit
+
+@Volatile
+internal var alarmTerminalCommandDispatcher: AlarmTerminalCommandDispatcher = { context, command ->
+    context.startService(command)
+}
+
 @AndroidEntryPoint
 class AlarmActivity : ComponentActivity() {
     private val presentationState = AlarmPresentationState()
@@ -140,7 +147,7 @@ class AlarmActivity : ComponentActivity() {
             }
         }
         try {
-            startService(serviceIntent)
+            alarmTerminalCommandDispatcher(this, serviceIntent)
         } catch (error: RuntimeException) {
             terminalActionController.acceptDispatchFailure(
                 sessionKey,
