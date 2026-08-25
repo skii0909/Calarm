@@ -97,7 +97,7 @@ class EvaluateShiftGroupDayUseCaseTest {
         enabled: Boolean = true,
         skipHoliday: Boolean = false,
     ) = ShiftTypeAlarm(
-        id, 10, name, listOf(name), 7, 0, mask, enabled, null, false, 5, skipHoliday,
+        id, 10, name, listOf(name), 7, 0, mask, enabled, null, false, true, 5, skipHoliday,
     )
 
     private fun events(vararg titles: String): Result<List<CalendarEvent>> = Result.success(

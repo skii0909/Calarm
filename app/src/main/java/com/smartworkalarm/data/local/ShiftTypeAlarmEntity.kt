@@ -20,6 +20,7 @@ data class ShiftTypeAlarmEntity(
     val enabled: Boolean,
     @ColumnInfo(name = "ringtone_uri") val ringtoneUri: String?,
     @ColumnInfo(name = "gradual_volume") val gradualVolume: Boolean,
+    @ColumnInfo(name = "snooze_enabled", defaultValue = "1") val snoozeEnabled: Boolean = true,
     @ColumnInfo(name = "snooze_minutes") val snoozeMinutes: Int,
     @ColumnInfo(name = "skip_on_public_holiday") val skipOnPublicHoliday: Boolean,
 )

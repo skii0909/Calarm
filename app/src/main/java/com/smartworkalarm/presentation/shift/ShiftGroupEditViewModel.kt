@@ -276,6 +276,7 @@ class ShiftGroupEditViewModel @Inject constructor(
         enabled = enabled,
         ringtoneUri = ringtoneUri,
         gradualVolume = gradualVolume,
+        snoozeEnabled = true,
         snoozeMinutes = snoozeMinutes,
         skipOnPublicHoliday = skipOnPublicHoliday,
     )

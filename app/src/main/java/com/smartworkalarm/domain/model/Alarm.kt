@@ -14,6 +14,7 @@ data class Alarm(
     val ringtoneUri: String? = null,
     val skipOnPublicHoliday: Boolean = false,
     val gradualVolume: Boolean = false,
+    val snoozeEnabled: Boolean = true,
     val snoozeMinutes: Int = 5,
 ) {
     fun repeatsOn(dayOfWeek: DayOfWeek): Boolean {

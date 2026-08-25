@@ -2,12 +2,29 @@ package com.smartworkalarm.data.local
 
 import com.smartworkalarm.domain.model.Alarm
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Test
 
 class AlarmEntityMapperTest {
     @Test
+    fun `alarm mapper preserves disabled snooze`() {
+        val alarm = sampleAlarm().copy(snoozeEnabled = false, snoozeMinutes = 17)
+
+        assertFalse(alarm.toEntity(createdAt = 0L).toDomain().snoozeEnabled)
+        assertEquals(17, alarm.toEntity(createdAt = 0L).toDomain().snoozeMinutes)
+    }
+
+    @Test
     fun `entity round trip preserves user settings`() {
-        val alarm = Alarm(
+        val alarm = sampleAlarm()
+
+        val entity = alarm.toEntity(createdAt = 123L)
+
+        assertEquals(alarm, entity.toDomain())
+        assertEquals(123L, entity.createdAt)
+    }
+
+    private fun sampleAlarm() = Alarm(
             id = 4,
             name = "출근",
             hour = 7,
@@ -21,10 +38,4 @@ class AlarmEntityMapperTest {
             gradualVolume = true,
             snoozeMinutes = 12,
         )
-
-        val entity = alarm.toEntity(createdAt = 123L)
-
-        assertEquals(alarm, entity.toDomain())
-        assertEquals(123L, entity.createdAt)
-    }
 }

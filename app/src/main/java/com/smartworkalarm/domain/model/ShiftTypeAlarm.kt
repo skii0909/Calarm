@@ -11,6 +11,7 @@ data class ShiftTypeAlarm(
     val enabled: Boolean,
     val ringtoneUri: String?,
     val gradualVolume: Boolean,
+    val snoozeEnabled: Boolean = true,
     val snoozeMinutes: Int,
     val skipOnPublicHoliday: Boolean,
 )

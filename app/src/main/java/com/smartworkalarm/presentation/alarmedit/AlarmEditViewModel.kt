@@ -98,18 +98,19 @@ class AlarmEditViewModel @Inject constructor(
     }
 
     private fun AlarmEditState.toAlarm() = Alarm(
-        id,
-        name,
-        hour,
-        minute,
-        repeatDaysMask,
-        enabled,
-        skipOnCalendarMatch,
-        CalendarKeywordMatcher.normalize(calendarKeywords),
-        ringtoneUri,
-        skipOnPublicHoliday,
-        gradualVolume,
-        snoozeMinutes.coerceIn(5, 30),
+        id = id,
+        name = name,
+        hour = hour,
+        minute = minute,
+        repeatDaysMask = repeatDaysMask,
+        enabled = enabled,
+        skipOnCalendarMatch = skipOnCalendarMatch,
+        calendarKeywords = CalendarKeywordMatcher.normalize(calendarKeywords),
+        ringtoneUri = ringtoneUri,
+        skipOnPublicHoliday = skipOnPublicHoliday,
+        gradualVolume = gradualVolume,
+        snoozeEnabled = true,
+        snoozeMinutes = snoozeMinutes.coerceIn(5, 30),
     )
 
 }

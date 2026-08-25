@@ -125,7 +125,7 @@ class ReconcileShiftAlarmsUseCaseTest {
 
     private fun type(id: Long, hour: Int = 7, enabled: Boolean = true) = ShiftTypeAlarm(
         id, 10, if (id == 2L) "야간" else "주간", listOf(if (id == 2L) "야간" else "주간"),
-        hour, 0, 127, enabled, null, false, 5, false,
+        hour, 0, 127, enabled, null, false, true, 5, false,
     )
 
     private class Scheduler : ShiftAlarmScheduler {

@@ -17,6 +17,7 @@ data class AlarmEntity(
     @ColumnInfo(name = "ringtone_uri", defaultValue = "NULL") val ringtoneUri: String? = null,
     @ColumnInfo(name = "skip_on_public_holiday", defaultValue = "0") val skipOnPublicHoliday: Boolean = false,
     @ColumnInfo(name = "gradual_volume", defaultValue = "0") val gradualVolume: Boolean = false,
+    @ColumnInfo(name = "snooze_enabled", defaultValue = "1") val snoozeEnabled: Boolean = true,
     @ColumnInfo(name = "snooze_minutes", defaultValue = "5") val snoozeMinutes: Int = 5,
     @ColumnInfo(name = "created_at") val createdAt: Long,
 )

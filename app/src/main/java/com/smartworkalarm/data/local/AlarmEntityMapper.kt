@@ -14,6 +14,7 @@ fun Alarm.toEntity(createdAt: Long) = AlarmEntity(
     ringtoneUri = ringtoneUri,
     skipOnPublicHoliday = skipOnPublicHoliday,
     gradualVolume = gradualVolume,
+    snoozeEnabled = snoozeEnabled,
     snoozeMinutes = snoozeMinutes.coerceIn(5, 30),
     createdAt = createdAt,
 )
@@ -30,5 +31,6 @@ fun AlarmEntity.toDomain() = Alarm(
     ringtoneUri = ringtoneUri,
     skipOnPublicHoliday = skipOnPublicHoliday,
     gradualVolume = gradualVolume,
+    snoozeEnabled = snoozeEnabled,
     snoozeMinutes = snoozeMinutes.coerceIn(5, 30),
 )

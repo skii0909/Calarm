@@ -40,7 +40,7 @@ class RescheduleAlarmsUseCaseTest {
 
     @Test
     fun `enabled shift type receives its own schedule`() = runTest {
-        val shift = ShiftTypeAlarm(8, 3, "야간", listOf("야간"), 19, 0, 31, true, null, false, 5, false)
+        val shift = ShiftTypeAlarm(8, 3, "야간", listOf("야간"), 19, 0, 31, true, null, false, true, 5, false)
         val scheduler = ShiftScheduler()
         val useCase = RescheduleAlarmsUseCase(
             Repository(emptyList()),

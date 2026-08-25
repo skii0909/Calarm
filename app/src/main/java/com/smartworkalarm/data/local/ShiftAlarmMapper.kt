@@ -30,6 +30,7 @@ fun ShiftTypeAlarm.toEntity() = ShiftTypeAlarmEntity(
     enabled = enabled,
     ringtoneUri = ringtoneUri,
     gradualVolume = gradualVolume,
+    snoozeEnabled = snoozeEnabled,
     snoozeMinutes = snoozeMinutes,
     skipOnPublicHoliday = skipOnPublicHoliday,
 )
@@ -45,6 +46,7 @@ fun ShiftTypeAlarmEntity.toDomain() = ShiftTypeAlarm(
     enabled = enabled,
     ringtoneUri = ringtoneUri,
     gradualVolume = gradualVolume,
+    snoozeEnabled = snoozeEnabled,
     snoozeMinutes = snoozeMinutes,
     skipOnPublicHoliday = skipOnPublicHoliday,
 )

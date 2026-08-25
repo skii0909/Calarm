@@ -208,7 +208,7 @@ class ShiftGroupListViewModelTest {
         enabled: Boolean = true,
         skipHoliday: Boolean = false,
         hour: Int = 7,
-    ) = ShiftTypeAlarm(id, 10, name, listOf(name), hour, 0, mask, enabled, null, false, 5, skipHoliday)
+    ) = ShiftTypeAlarm(id, 10, name, listOf(name), hour, 0, mask, enabled, null, false, true, 5, skipHoliday)
 
     private fun events(vararg titles: String) = Result.success(
         titles.map { CalendarEvent(it, now, now.plusSeconds(60), false) },

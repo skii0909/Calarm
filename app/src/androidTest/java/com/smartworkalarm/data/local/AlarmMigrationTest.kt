@@ -8,6 +8,7 @@ import com.smartworkalarm.di.MIGRATION_1_2
 import com.smartworkalarm.di.MIGRATION_2_3
 import com.smartworkalarm.di.MIGRATION_3_4
 import com.smartworkalarm.di.MIGRATION_4_5
+import com.smartworkalarm.di.MIGRATION_5_6
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Rule
@@ -103,6 +104,35 @@ class AlarmMigrationTest {
             assertEquals("0", draftDefault)
         }
         db.close()
+    }
+
+    @Test
+    fun migrate5To6_defaultsBothSnoozeFlagsToEnabled() {
+        helper.createDatabase(TEST_DB, 5).apply {
+            execSQL(
+                "INSERT INTO alarms (id,name,hour,minute,repeat_days_mask,enabled,skip_on_vacation," +
+                    "calendar_keywords,ringtone_uri,skip_on_public_holiday,gradual_volume,snooze_minutes) " +
+                    "VALUES (1,'아침',7,0,31,1,1,'휴가',NULL,0,0,9)",
+            )
+            execSQL("INSERT INTO shift_alarm_groups (id,name,enabled,emergency_shift_type_id,is_draft) VALUES (1,'교대',1,NULL,0)")
+            execSQL(
+                "INSERT INTO shift_type_alarms (id,group_id,name,exact_titles,hour,minute,repeat_days_mask,enabled," +
+                    "ringtone_uri,gradual_volume,snooze_minutes,skip_on_public_holiday) " +
+                    "VALUES (1,1,'야간','야간',20,0,127,1,NULL,0,11,0)",
+            )
+            close()
+        }
+
+        helper.runMigrationsAndValidate(TEST_DB, 6, true, MIGRATION_5_6).use { db ->
+            db.query("SELECT snooze_enabled FROM alarms WHERE id=1").use {
+                assertEquals(true, it.moveToFirst())
+                assertEquals(1, it.getInt(0))
+            }
+            db.query("SELECT snooze_enabled FROM shift_type_alarms WHERE id=1").use {
+                assertEquals(true, it.moveToFirst())
+                assertEquals(1, it.getInt(0))
+            }
+        }
     }
 
     companion object { private const val TEST_DB = "migration-test" }

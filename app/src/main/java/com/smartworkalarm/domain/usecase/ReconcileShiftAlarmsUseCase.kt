@@ -73,5 +73,6 @@ fun ShiftTypeAlarm.toAlarm() = Alarm(
     ringtoneUri = ringtoneUri,
     skipOnPublicHoliday = skipOnPublicHoliday,
     gradualVolume = gradualVolume,
+    snoozeEnabled = snoozeEnabled,
     snoozeMinutes = snoozeMinutes,
 )
