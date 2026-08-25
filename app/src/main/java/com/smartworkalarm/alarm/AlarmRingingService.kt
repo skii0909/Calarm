@@ -29,11 +29,7 @@ class AlarmRingingService : Service() {
     @Inject lateinit var shiftScheduler: ShiftAlarmScheduler
     @Inject lateinit var clock: Clock
     private var player: MediaPlayer? = null
-    private var currentAlarmId: Long = -1
-    private var snoozeEnabled: Boolean = true
-    private var snoozeMinutes: Int = 5
-    private var currentIsShiftAlarm: Boolean = false
-    private var currentScheduledOccurrenceAt: Instant? = null
+    private val ringingSessionState = RingingSessionStateMachine()
     private val volumeHandler = Handler(Looper.getMainLooper())
     private var volumeStep = 0
     private val volumeRamp = object : Runnable {
@@ -48,60 +44,56 @@ class AlarmRingingService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
-            ACTION_DISMISS -> stopRinging()
-            ACTION_SNOOZE -> {
-                if (!canScheduleSnooze(snoozeEnabled, intent.action)) return START_NOT_STICKY
-                val id = intent.getLongExtra(AlarmSchedulerImpl.EXTRA_ALARM_ID, currentAlarmId)
-                currentIsShiftAlarm = intent.getBooleanExtra(EXTRA_IS_SHIFT_ALARM, currentIsShiftAlarm)
-                snoozeMinutes = intent.getIntExtra(EXTRA_SNOOZE_MINUTES, snoozeMinutes).coerceIn(5, 30)
-                val scheduled = id >= 0 && scheduleSnoozeSafely {
-                    val triggerAt = clock.instant().plus(Duration.ofMinutes(snoozeMinutes.toLong()))
-                    if (currentIsShiftAlarm) {
-                        val scheduledOccurrenceAt = intent.scheduledOccurrenceAt() ?: currentScheduledOccurrenceAt ?: triggerAt
-                        shiftScheduler.scheduleShiftSnooze(id, triggerAt, scheduledOccurrenceAt)
-                    } else {
-                        scheduler.scheduleSnooze(id, triggerAt)
-                    }
-                }
-                if (scheduled) {
-                    stopRinging()
-                } else {
+            ACTION_START -> startRinging(intent)
+            ACTION_DISMISS -> {
+                ringingSessionState.dismiss()
+                stopRinging()
+            }
+            ACTION_SNOOZE -> when (
+                ringingSessionState.requestSnooze(intent.action, ::scheduleSnooze)
+            ) {
+                SnoozeRequestOutcome.Scheduled -> stopRinging()
+                SnoozeRequestOutcome.Failed -> {
                     publishActionFailure("다시 울림을 예약하지 못했습니다. 다시 시도하거나 알람을 해제해 주세요.")
                 }
+                SnoozeRequestOutcome.Rejected -> Unit
             }
-            else -> startRinging(intent)
+            else -> Unit
         }
         return START_NOT_STICKY
     }
 
-    private fun startRinging(intent: Intent?) {
-        currentAlarmId = intent?.getLongExtra(AlarmSchedulerImpl.EXTRA_ALARM_ID, -1L) ?: -1L
-        currentIsShiftAlarm = intent?.getBooleanExtra(EXTRA_IS_SHIFT_ALARM, false) ?: false
-        currentScheduledOccurrenceAt = intent?.scheduledOccurrenceAt()
-        val name = intent?.getStringExtra(EXTRA_ALARM_NAME) ?: "알람"
-        snoozeEnabled = intent?.getBooleanExtra(EXTRA_SNOOZE_ENABLED, true) ?: true
-        snoozeMinutes = intent?.getIntExtra(EXTRA_SNOOZE_MINUTES, 5)?.coerceIn(5, 30) ?: 5
+    private fun startRinging(intent: Intent) {
+        val session = ActiveRingingSession(
+            alarmId = intent.getLongExtra(AlarmSchedulerImpl.EXTRA_ALARM_ID, -1L),
+            isShiftAlarm = intent.getBooleanExtra(EXTRA_IS_SHIFT_ALARM, false),
+            snoozeEnabled = intent.getBooleanExtra(EXTRA_SNOOZE_ENABLED, true),
+            snoozeMinutes = intent.getIntExtra(EXTRA_SNOOZE_MINUTES, 5).coerceIn(5, 30),
+            scheduledOccurrenceAt = intent.scheduledOccurrenceAt(),
+        )
+        ringingSessionState.start(session)
+        val name = intent.getStringExtra(EXTRA_ALARM_NAME) ?: "알람"
         startForeground(
             NOTIFICATION_ID,
             notificationFactory.create(
-                currentAlarmId,
+                session.alarmId,
                 name,
-                currentIsShiftAlarm,
-                intent?.getBooleanExtra(EXTRA_CALENDAR_WARNING, false) ?: false,
-                currentScheduledOccurrenceAt,
-                snoozeEnabled,
-                snoozeMinutes,
+                session.isShiftAlarm,
+                intent.getBooleanExtra(EXTRA_CALENDAR_WARNING, false),
+                session.scheduledOccurrenceAt,
+                session.snoozeEnabled,
+                session.snoozeMinutes,
             ),
         )
         if (player == null) {
-            val selected = intent?.getStringExtra(EXTRA_RINGTONE_URI)
+            val selected = intent.getStringExtra(EXTRA_RINGTONE_URI)
             val candidates = AlarmSoundResolver.candidates(
                 selected,
                 RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)?.toString(),
                 RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)?.toString(),
             )
             player = candidates.firstNotNullOfOrNull(::startPlayer)
-            if (intent?.getBooleanExtra(EXTRA_GRADUAL_VOLUME, false) == true && player != null) {
+            if (intent.getBooleanExtra(EXTRA_GRADUAL_VOLUME, false) && player != null) {
                 volumeStep = 0
                 volumeHandler.removeCallbacks(volumeRamp)
                 volumeRamp.run()
@@ -110,6 +102,19 @@ class AlarmRingingService : Service() {
         getSystemService<Vibrator>()?.vibrate(
             VibrationEffect.createWaveform(longArrayOf(0, 500, 500), 0),
         )
+    }
+
+    private fun scheduleSnooze(session: ActiveRingingSession): ScheduleResult {
+        val triggerAt = clock.instant().plus(Duration.ofMinutes(session.snoozeMinutes.toLong()))
+        return if (session.isShiftAlarm) {
+            shiftScheduler.scheduleShiftSnooze(
+                session.alarmId,
+                triggerAt,
+                session.scheduledOccurrenceAt ?: triggerAt,
+            )
+        } else {
+            scheduler.scheduleSnooze(session.alarmId, triggerAt)
+        }
     }
 
     private fun startPlayer(uri: String): MediaPlayer? {
@@ -142,6 +147,7 @@ class AlarmRingingService : Service() {
     }
 
     override fun onDestroy() {
+        ringingSessionState.dismiss()
         volumeHandler.removeCallbacks(volumeRamp)
         player?.runCatching { stop() }
         player?.release()
@@ -167,9 +173,6 @@ class AlarmRingingService : Service() {
 
 internal fun canScheduleSnooze(snoozeEnabled: Boolean, requestedAction: String?): Boolean =
     snoozeEnabled && requestedAction == AlarmRingingService.ACTION_SNOOZE
-
-internal fun scheduleSnoozeSafely(schedule: () -> ScheduleResult): Boolean =
-    runCatching(schedule).getOrNull() == ScheduleResult.Scheduled
 
 private fun Intent.scheduledOccurrenceAt(): Instant? =
     getLongExtra(AlarmSchedulerImpl.EXTRA_SCHEDULED_OCCURRENCE_AT, Long.MIN_VALUE)

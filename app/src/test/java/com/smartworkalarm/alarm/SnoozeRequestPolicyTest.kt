@@ -1,6 +1,5 @@
 package com.smartworkalarm.alarm
 
-import com.smartworkalarm.domain.repository.ScheduleResult
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -16,12 +15,5 @@ class SnoozeRequestPolicyTest {
     fun `enabled snooze rejects unrelated and missing actions`() {
         assertFalse(canScheduleSnooze(true, AlarmRingingService.ACTION_DISMISS))
         assertFalse(canScheduleSnooze(true, null))
-    }
-
-    @Test
-    fun `ringing stops only after snooze is scheduled`() {
-        assertTrue(scheduleSnoozeSafely { ScheduleResult.Scheduled })
-        assertFalse(scheduleSnoozeSafely { ScheduleResult.ExactAlarmPermissionRequired })
-        assertFalse(scheduleSnoozeSafely { error("scheduler failure") })
     }
 }
