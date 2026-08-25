@@ -16,6 +16,7 @@ class AlarmPresentationStateTest {
                 booleans = mapOf(
                     AlarmRingingService.EXTRA_IS_SHIFT_ALARM to false,
                     AlarmRingingService.EXTRA_CALENDAR_WARNING to false,
+                    AlarmRingingService.EXTRA_SNOOZE_ENABLED to true,
                 ),
                 strings = mapOf(AlarmNotificationFactory.EXTRA_ALARM_NAME to "첫 알람"),
                 ints = mapOf(AlarmRingingService.EXTRA_SNOOZE_MINUTES to 5),
@@ -31,6 +32,7 @@ class AlarmPresentationStateTest {
                 booleans = mapOf(
                     AlarmRingingService.EXTRA_IS_SHIFT_ALARM to true,
                     AlarmRingingService.EXTRA_CALENDAR_WARNING to true,
+                    AlarmRingingService.EXTRA_SNOOZE_ENABLED to false,
                 ),
                 strings = mapOf(AlarmNotificationFactory.EXTRA_ALARM_NAME to "두 번째 근무 알람"),
                 ints = mapOf(AlarmRingingService.EXTRA_SNOOZE_MINUTES to 17),
@@ -43,6 +45,7 @@ class AlarmPresentationStateTest {
                 isShiftAlarm = true,
                 alarmName = "두 번째 근무 알람",
                 calendarWarning = true,
+                snoozeEnabled = false,
                 snoozeMinutes = 17,
                 scheduledOccurrenceAt = 2_222L,
             ),
