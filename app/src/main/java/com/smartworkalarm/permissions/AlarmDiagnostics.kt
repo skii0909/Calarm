@@ -8,6 +8,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.os.PowerManager
 import androidx.core.content.ContextCompat
+import androidx.annotation.RequiresApi
 import com.smartworkalarm.alarm.AlarmScheduleAudit
 import com.smartworkalarm.alarm.AlarmScheduleAuditStore
 import java.time.Clock
@@ -55,10 +56,8 @@ class AndroidAlarmDiagnosticsSource @Inject constructor(
             context,
             Manifest.permission.POST_NOTIFICATIONS,
         ) == PackageManager.PERMISSION_GRANTED
-        val exactGranted = sdk < 31 || context.getSystemService(AlarmManager::class.java)
-            .canScheduleExactAlarms()
-        val fullScreenGranted = sdk < 34 || context.getSystemService(NotificationManager::class.java)
-            .canUseFullScreenIntent()
+        val exactGranted = if (Build.VERSION.SDK_INT >= 31) canScheduleExactAlarms() else true
+        val fullScreenGranted = if (Build.VERSION.SDK_INT >= 34) canUseFullScreenIntent() else true
         val batteryIgnored = context.getSystemService(PowerManager::class.java)
             .isIgnoringBatteryOptimizations(context.packageName)
         return evaluateAlarmDiagnostics(
@@ -71,6 +70,14 @@ class AndroidAlarmDiagnosticsSource @Inject constructor(
             now = clock.instant(),
         )
     }
+
+    @RequiresApi(31)
+    private fun canScheduleExactAlarms(): Boolean =
+        context.getSystemService(AlarmManager::class.java).canScheduleExactAlarms()
+
+    @RequiresApi(34)
+    private fun canUseFullScreenIntent(): Boolean =
+        context.getSystemService(NotificationManager::class.java).canUseFullScreenIntent()
 }
 
 internal fun evaluateAlarmDiagnostics(

@@ -372,7 +372,7 @@ private fun DragToDismissZone(
         pulse
     }
 
-    BoxWithConstraints(
+    Box(
         modifier = modifier.fillMaxWidth(),
         contentAlignment = Alignment.Center,
     ) {
