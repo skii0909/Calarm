@@ -18,6 +18,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.smartworkalarm.permissions.RequiredPermission
+import com.smartworkalarm.permissions.AlarmDiagnosticKind
 
 data class PermissionUiState(
     val permission: RequiredPermission,
@@ -29,6 +30,7 @@ fun SettingsRoute(
     onBack: () -> Unit,
     missingRequiredPermissions: List<RequiredPermission>,
     onPermissionAction: (RequiredPermission) -> Unit,
+    onBatteryOptimizationAction: () -> Unit,
     onCalendarConnectionChanged: () -> Unit,
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
@@ -62,6 +64,15 @@ fun SettingsRoute(
             state = state,
             permissions = permissions,
             onPermissionAction = onPermissionAction,
+            onDiagnosticAction = { kind ->
+                when (kind) {
+                    AlarmDiagnosticKind.NOTIFICATIONS -> onPermissionAction(RequiredPermission.NOTIFICATIONS)
+                    AlarmDiagnosticKind.EXACT_ALARM -> onPermissionAction(RequiredPermission.EXACT_ALARM)
+                    AlarmDiagnosticKind.FULL_SCREEN -> onPermissionAction(RequiredPermission.FULL_SCREEN_ALARM)
+                    AlarmDiagnosticKind.BATTERY -> onBatteryOptimizationAction()
+                    AlarmDiagnosticKind.SCHEDULE -> Unit
+                }
+            },
             onSetCalendarSelected = { calendarId, selected ->
                 viewModel.setCalendarSelected(calendarId, selected)
                 onCalendarConnectionChanged()

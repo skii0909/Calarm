@@ -6,6 +6,8 @@ import com.smartworkalarm.alarm.AlarmSchedulerImpl
 import com.smartworkalarm.alarm.AlarmScheduleAuditStore
 import com.smartworkalarm.alarm.AlarmRinger
 import com.smartworkalarm.alarm.AlarmRingerImpl
+import com.smartworkalarm.permissions.AlarmDiagnosticsSource
+import com.smartworkalarm.permissions.AndroidAlarmDiagnosticsSource
 import com.smartworkalarm.alarm.SharedPreferencesAlarmScheduleAuditStore
 import com.smartworkalarm.domain.usecase.SaveAlarmUseCase
 import com.smartworkalarm.presentation.alarmedit.AlarmSaver
@@ -36,6 +38,9 @@ abstract class AlarmBindings {
 
     @Binds
     abstract fun bindAlarmSaver(implementation: SaveAlarmUseCase): AlarmSaver
+
+    @Binds
+    abstract fun bindAlarmDiagnosticsSource(implementation: AndroidAlarmDiagnosticsSource): AlarmDiagnosticsSource
 }
 
 @Module

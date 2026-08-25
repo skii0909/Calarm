@@ -8,6 +8,11 @@ import org.junit.Test
 
 class AlarmScheduleAuditStoreTest {
     @Test
+    fun `audit persistence failure does not turn a scheduled alarm into an app failure`() {
+        recordAuditSafely { error("disk full") }
+    }
+
+    @Test
     fun `recording and cancelling exposes next active trigger`() {
         val store = SharedPreferencesAlarmScheduleAuditStore(InMemorySharedPreferences())
         val later = Instant.parse("2026-08-26T22:00:00Z")

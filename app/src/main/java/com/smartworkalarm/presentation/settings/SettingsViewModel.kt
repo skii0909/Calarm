@@ -5,6 +5,9 @@ import com.smartworkalarm.domain.model.CalendarConnectionState
 import com.smartworkalarm.domain.model.ConnectedCalendar
 import com.smartworkalarm.domain.repository.CalendarConnectionRepository
 import com.smartworkalarm.domain.repository.CalendarSelectionRepository
+import com.smartworkalarm.permissions.AlarmDiagnosticItem
+import com.smartworkalarm.permissions.AlarmDiagnosticsSource
+import com.smartworkalarm.permissions.EmptyAlarmDiagnosticsSource
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -50,19 +53,23 @@ data class SettingsUiState(
     val catalogStatus: CalendarCatalogStatus = CalendarCatalogStatus.LOADING,
     val accounts: List<CalendarAccountUiState> = emptyList(),
     val userMessage: String? = null,
+    val diagnostics: List<AlarmDiagnosticItem> = emptyList(),
 )
 
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
     private val connectionRepository: CalendarConnectionRepository,
     private val selectionRepository: CalendarSelectionRepository,
+    private val diagnosticsSource: AlarmDiagnosticsSource = EmptyAlarmDiagnosticsSource,
 ) : ViewModel() {
     private val _state = MutableStateFlow(SettingsUiState())
     val state: StateFlow<SettingsUiState> = _state.asStateFlow()
 
     fun refresh() {
         val connection = connectionRepository.getState()
-        _state.value = connection.toSettingsUiState()
+        _state.value = connection.toSettingsUiState().copy(
+            diagnostics = runCatching(diagnosticsSource::read).getOrDefault(emptyList()),
+        )
     }
 
     fun setCalendarSelected(calendarId: Long, selected: Boolean) {

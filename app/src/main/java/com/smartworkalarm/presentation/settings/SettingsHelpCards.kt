@@ -36,8 +36,8 @@ internal fun ExpandableHelpCard(help: HelpSection) {
 internal val HELP_SECTIONS = listOf(
     HelpSection(
         title = "일반 알람",
-        summary = "여러 요일 반복 알람을 만들고, 설정한 5~30분 뒤 같은 알람 화면으로 다시 울립니다.",
-        detail = "알람마다 반복 요일을 선택할 수 있습니다. 해제는 현재 발생한 알람만 끝내며 다음 반복 일정은 유지됩니다. 다시 울림을 누르면 설정한 5~30분 뒤 같은 알람 화면으로 다시 울립니다.",
+        summary = "여러 요일 반복 알람을 만들고, 필요할 때만 다시 울림을 사용할 수 있습니다.",
+        detail = "알람마다 반복 요일을 선택할 수 있습니다. 해제는 현재 발생한 알람만 끝내며 다음 반복 일정은 유지됩니다. 다시 울림 사용을 켜면 알람 화면을 3초간 길게 눌러 설정한 5~30분 뒤 같은 화면으로 다시 울립니다.",
     ),
     HelpSection(
         title = "캘린더 자동 건너뛰기",
@@ -63,5 +63,10 @@ internal val HELP_SECTIONS = listOf(
         title = "안전 동작",
         summary = "캘린더를 읽지 못해도 필요한 알람을 놓치지 않도록 안전하게 동작합니다.",
         detail = "일반 알람은 캘린더 조회 실패 시 울립니다. 교대 그룹은 비상 기본 근무 알람만 울리고, 비상 기본이 없으면 건너뜁니다.",
+    ),
+    HelpSection(
+        title = "Samsung·기기별 설정",
+        summary = "절전 앱과 권한 설정에 따라 잠금화면 알람이 제한될 수 있습니다.",
+        detail = "Galaxy S22 Ultra를 포함한 Samsung 기기에서는 앱이 절전 앱 또는 초절전 앱으로 분류되면 알람과 백그라운드 실행이 지연될 수 있습니다. 알림, 정확한 알람, 전체화면 알람, 배터리 사용량을 알람 작동 진단에서 확인하세요. 잠금화면과 Always On Display에서도 직접 시험하는 것을 권장합니다. 메뉴 이름과 위치는 Android·One UI 버전에 따라 달라질 수 있습니다.",
     ),
 )

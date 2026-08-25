@@ -46,6 +46,10 @@ class RequiredPermissionsController(
         packageUri,
     )
 
+    fun batteryOptimizationIntent(): Intent = Intent(
+        Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS,
+    )
+
     private fun isGranted(permission: String): Boolean =
         ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
 

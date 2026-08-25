@@ -34,6 +34,9 @@ import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.smartworkalarm.permissions.RequiredPermission
+import com.smartworkalarm.permissions.AlarmDiagnosticItem
+import com.smartworkalarm.permissions.AlarmDiagnosticKind
+import com.smartworkalarm.permissions.DiagnosticStatus
 import com.smartworkalarm.presentation.components.FeaturePill
 import com.smartworkalarm.presentation.components.GradientHero
 import com.smartworkalarm.presentation.components.NightPulseSection
@@ -43,6 +46,7 @@ fun SettingsScreen(
     state: SettingsUiState,
     permissions: List<PermissionUiState>,
     onPermissionAction: (RequiredPermission) -> Unit,
+    onDiagnosticAction: (AlarmDiagnosticKind) -> Unit = {},
     onSetCalendarSelected: (Long, Boolean) -> Unit,
     onSetAccountSelected: (String, Boolean) -> Unit,
     onBack: () -> Unit,
@@ -80,6 +84,10 @@ fun SettingsScreen(
             permissions = permissions,
             onPermissionAction = onPermissionAction,
         )
+        AlarmDiagnosticsCard(
+            diagnostics = state.diagnostics,
+            onAction = onDiagnosticAction,
+        )
         CalendarCard(
             state = state,
             onSetCalendarSelected = onSetCalendarSelected,
@@ -91,6 +99,67 @@ fun SettingsScreen(
         Spacer(Modifier.size(8.dp))
     }
 }
+
+@Composable
+private fun AlarmDiagnosticsCard(
+    diagnostics: List<AlarmDiagnosticItem>,
+    onAction: (AlarmDiagnosticKind) -> Unit,
+) {
+    NightPulseSection(
+        title = "알람 작동 진단",
+        subtitle = "현재 휴대폰에서 알람을 방해할 수 있는 설정을 확인합니다.",
+    ) {
+        if (diagnostics.isEmpty()) {
+            Text("진단 정보를 불러오지 못했습니다.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        diagnostics.forEachIndexed { index, item ->
+            if (index > 0) HorizontalDivider()
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Text(item.kind.label, style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        item.status.label,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = if (item.status == DiagnosticStatus.ACTION_REQUIRED) {
+                            MaterialTheme.colorScheme.error
+                        } else {
+                            MaterialTheme.colorScheme.primary
+                        },
+                    )
+                    Text(
+                        item.summary,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                if (item.status == DiagnosticStatus.ACTION_REQUIRED && item.kind != AlarmDiagnosticKind.SCHEDULE) {
+                    TextButton(onClick = { onAction(item.kind) }) { Text("설정하러 가기") }
+                }
+            }
+        }
+    }
+}
+
+private val AlarmDiagnosticKind.label: String
+    get() = when (this) {
+        AlarmDiagnosticKind.NOTIFICATIONS -> "알림 권한"
+        AlarmDiagnosticKind.EXACT_ALARM -> "정확한 알람"
+        AlarmDiagnosticKind.FULL_SCREEN -> "잠금화면 전체화면 알람"
+        AlarmDiagnosticKind.BATTERY -> "배터리 최적화"
+        AlarmDiagnosticKind.SCHEDULE -> "최근 알람 예약"
+    }
+
+private val DiagnosticStatus.label: String
+    get() = when (this) {
+        DiagnosticStatus.OK -> "정상"
+        DiagnosticStatus.ACTION_REQUIRED -> "확인 필요"
+        DiagnosticStatus.NOT_APPLICABLE -> "해당 없음"
+        DiagnosticStatus.UNKNOWN -> "알 수 없음"
+    }
 
 @Composable
 private fun PermissionCard(

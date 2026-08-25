@@ -32,6 +32,7 @@ import androidx.compose.ui.Modifier
 fun WorkAlarmNavHost(
     missingRequiredPermissions: List<RequiredPermission> = emptyList(),
     onRequiredPermissionAction: (RequiredPermission) -> Unit = {},
+    onBatteryOptimizationAction: () -> Unit = {},
 ) {
     val navController = rememberNavController()
     val preferences = OnboardingPreferences(LocalContext.current)
@@ -92,6 +93,7 @@ fun WorkAlarmNavHost(
                 onBack = { navController.popBackStack() },
                 missingRequiredPermissions = missingRequiredPermissions,
                 onPermissionAction = onRequiredPermissionAction,
+                onBatteryOptimizationAction = onBatteryOptimizationAction,
                 onCalendarConnectionChanged = connectionViewModel::refresh,
             )
         }

@@ -7,8 +7,29 @@ import com.smartworkalarm.domain.repository.CalendarSelectionRepository
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
+import com.smartworkalarm.permissions.AlarmDiagnosticItem
+import com.smartworkalarm.permissions.AlarmDiagnosticKind
+import com.smartworkalarm.permissions.AlarmDiagnosticsSource
+import com.smartworkalarm.permissions.DiagnosticStatus
 
 class SettingsViewModelTest {
+    @Test
+    fun `refresh updates alarm diagnostics with calendar state`() {
+        val diagnostic = AlarmDiagnosticItem(
+            AlarmDiagnosticKind.BATTERY,
+            DiagnosticStatus.ACTION_REQUIRED,
+            "배터리 설정을 확인하세요.",
+        )
+        val viewModel = SettingsViewModel(
+            QueueConnectionRepository(CalendarConnectionState(true, emptyList())),
+            RecordingSelectionRepository(),
+            AlarmDiagnosticsSource { listOf(diagnostic) },
+        )
+
+        viewModel.refresh()
+
+        assertEquals(listOf(diagnostic), viewModel.state.value.diagnostics)
+    }
     @Test
     fun `starts loading and queries only after refresh`() {
         val repository = QueueConnectionRepository(

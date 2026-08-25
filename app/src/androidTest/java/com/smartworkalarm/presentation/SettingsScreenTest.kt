@@ -8,6 +8,9 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import com.smartworkalarm.permissions.RequiredPermission
+import com.smartworkalarm.permissions.AlarmDiagnosticItem
+import com.smartworkalarm.permissions.AlarmDiagnosticKind
+import com.smartworkalarm.permissions.DiagnosticStatus
 import com.smartworkalarm.presentation.settings.AccountSelection
 import com.smartworkalarm.presentation.settings.CalendarAccountUiState
 import com.smartworkalarm.presentation.settings.CalendarCatalogStatus
@@ -53,7 +56,7 @@ class SettingsScreenTest {
         setSettingsContent()
 
         compose.onNodeWithText("일반 알람").performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText("설정한 5~30분 뒤 같은 알람 화면으로 다시 울립니다.", substring = true)
+        compose.onNodeWithText("필요할 때만 다시 울림을 사용할 수 있습니다.", substring = true)
             .performScrollTo()
             .assertIsDisplayed()
         compose.onNodeWithText("캘린더 자동 건너뛰기").performScrollTo().assertIsDisplayed()
@@ -64,6 +67,17 @@ class SettingsScreenTest {
         compose.onNodeWithText("22시 확인").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("공휴일·알람음·다시 울림").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("안전 동작").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Samsung·기기별 설정").performScrollTo().assertIsDisplayed()
+    }
+
+    @Test
+    fun showsAlarmDiagnosticsAndActionRequiredState() {
+        setSettingsContent()
+
+        compose.onNodeWithText("알람 작동 진단").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("배터리 최적화").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("확인 필요", useUnmergedTree = true).performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("설정하러 가기", useUnmergedTree = true).performScrollTo().assertIsDisplayed()
     }
 
     private fun setSettingsContent() {
@@ -79,7 +93,17 @@ class SettingsScreenTest {
         compose.setContent {
             MaterialTheme {
                 SettingsScreen(
-                    state = SettingsUiState(CalendarCatalogStatus.READY, listOf(account)),
+                    state = SettingsUiState(
+                        catalogStatus = CalendarCatalogStatus.READY,
+                        accounts = listOf(account),
+                        diagnostics = listOf(
+                            AlarmDiagnosticItem(
+                                kind = AlarmDiagnosticKind.BATTERY,
+                                status = DiagnosticStatus.ACTION_REQUIRED,
+                                summary = "배터리 절전으로 알람이 지연될 수 있습니다.",
+                            ),
+                        ),
+                    ),
                     permissions = listOf(
                         PermissionUiState(RequiredPermission.CALENDAR, granted = true),
                         PermissionUiState(RequiredPermission.NOTIFICATIONS, granted = false),

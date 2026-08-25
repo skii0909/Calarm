@@ -73,6 +73,9 @@ class MainActivity : ComponentActivity() {
                 WorkAlarmNavHost(
                     missingRequiredPermissions = missingPermissions,
                     onRequiredPermissionAction = ::handlePermissionAction,
+                    onBatteryOptimizationAction = {
+                        openPermissionSettings(requiredPermissions.batteryOptimizationIntent())
+                    },
                 )
                 if (permissionsSession.state.shouldShow(missingPermissions)) {
                     RequiredPermissionsPrompt(
