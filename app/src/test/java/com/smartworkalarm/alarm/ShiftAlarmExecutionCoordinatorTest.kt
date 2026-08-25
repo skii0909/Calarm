@@ -19,6 +19,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Test
 
 class ShiftAlarmExecutionCoordinatorTest {
@@ -149,6 +150,42 @@ class ShiftAlarmExecutionCoordinatorTest {
     }
 
     @Test
+    fun `shift coordinator carries disabled snooze to ringer`() = runTest {
+        val disabledSnoozeNight = night.copy(snoozeEnabled = false)
+        var startedSnoozeEnabled = true
+        val coordinator = ShiftAlarmExecutionCoordinator(
+            repository = Repository(
+                group = ShiftAlarmGroup(10, "교대", true, null),
+                types = listOf(disabledSnoozeNight),
+            ),
+            scheduler = Scheduler(onSchedule = {}),
+            calculator = CalculateNextOccurrenceUseCase(),
+            decisionProvider = { _, _, _ ->
+                ShiftExecutionDecision.Evaluated(
+                    ShiftDayEvaluation.Matched(disabledSnoozeNight.id, disabledSnoozeNight.name),
+                )
+            },
+            ringer = object : AlarmRinger {
+                override fun start(
+                    alarmId: Long,
+                    alarmName: String,
+                    ringtoneUri: String?,
+                    gradualVolume: Boolean,
+                    snoozeEnabled: Boolean,
+                    snoozeMinutes: Int,
+                ) {
+                    startedSnoozeEnabled = snoozeEnabled
+                }
+            },
+            zoneId = zone,
+        )
+
+        coordinator.execute(disabledSnoozeNight.id, false, now)
+
+        assertFalse(startedSnoozeEnabled)
+    }
+
+    @Test
     fun `production calendar policy skips a vacation event before a matched shift`() = runTest {
         val coordinator = productionCoordinator(Result.success(listOf(event("여름휴가"))))
 
@@ -274,7 +311,14 @@ class ShiftAlarmExecutionCoordinatorTest {
     }
 
     private fun noOpRinger() = object : AlarmRinger {
-        override fun start(alarmId: Long, alarmName: String, ringtoneUri: String?, gradualVolume: Boolean, snoozeMinutes: Int) = Unit
+        override fun start(
+            alarmId: Long,
+            alarmName: String,
+            ringtoneUri: String?,
+            gradualVolume: Boolean,
+            snoozeEnabled: Boolean,
+            snoozeMinutes: Int,
+        ) = Unit
     }
 
     private class Scheduler(

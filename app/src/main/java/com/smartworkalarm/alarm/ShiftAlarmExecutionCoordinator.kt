@@ -121,6 +121,7 @@ class ShiftAlarmExecutionCoordinator internal constructor(
             shiftType.name,
             shiftType.ringtoneUri,
             shiftType.gradualVolume,
+            shiftType.snoozeEnabled,
             shiftType.snoozeMinutes,
             warning,
             scheduledOccurrenceAt,

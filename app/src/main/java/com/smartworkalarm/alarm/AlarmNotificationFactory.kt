@@ -22,6 +22,7 @@ class AlarmNotificationFactory @Inject constructor(
         isShiftAlarm: Boolean = false,
         calendarWarning: Boolean = false,
         scheduledOccurrenceAt: Instant? = null,
+        snoozeEnabled: Boolean = true,
         snoozeMinutes: Int = 5,
     ): Notification {
         ensureChannel()
@@ -35,6 +36,7 @@ class AlarmNotificationFactory @Inject constructor(
                 putExtra(EXTRA_ALARM_NAME, name)
                 putExtra(AlarmRingingService.EXTRA_IS_SHIFT_ALARM, isShiftAlarm)
                 putExtra(AlarmRingingService.EXTRA_CALENDAR_WARNING, calendarWarning)
+                putExtra(AlarmRingingService.EXTRA_SNOOZE_ENABLED, snoozeEnabled)
                 putExtra(AlarmRingingService.EXTRA_SNOOZE_MINUTES, snoozeMinutes.coerceIn(5, 30))
                 scheduledOccurrenceAt?.let {
                     putExtra(AlarmSchedulerImpl.EXTRA_SCHEDULED_OCCURRENCE_AT, it.toEpochMilli())

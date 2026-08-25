@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Test
 
 class AlarmExecutionCoordinatorTest {
@@ -24,7 +25,7 @@ class AlarmExecutionCoordinatorTest {
         val coordinator = coordinator(
             decision = AlarmExecutionDecision.SKIP_FOR_VACATION,
             onSchedule = { events += "schedule" },
-            onRing = { events += "ring" },
+            onRing = { _, _ -> events += "ring" },
         )
 
         assertEquals(ExecutionOutcome.SkippedForVacation, coordinator.execute(7, false, now))
@@ -39,7 +40,7 @@ class AlarmExecutionCoordinatorTest {
             alarm = Alarm(7, "출근", 7, 0, 31, true, true, ringtoneUri = "content://alarm/custom"),
             decision = AlarmExecutionDecision.RING,
             onSchedule = { events += "schedule" },
-            onRing = { uri ->
+            onRing = { uri, _ ->
                 events += "ring"
                 ringingUri = uri
             },
@@ -56,12 +57,25 @@ class AlarmExecutionCoordinatorTest {
         val coordinator = coordinator(
             decision = AlarmExecutionDecision.RING,
             onSchedule = { schedules++ },
-            onRing = {},
+            onRing = { _, _ -> },
         )
 
         coordinator.execute(7, true, now)
 
         assertEquals(0, schedules)
+    }
+
+    @Test
+    fun `coordinator carries disabled snooze to ringer`() = runTest {
+        var startedSnoozeEnabled = true
+        val coordinator = coordinator(
+            alarm = Alarm(7, "출근", 7, 0, 31, true, true).copy(snoozeEnabled = false),
+            onRing = { _, snoozeEnabled -> startedSnoozeEnabled = snoozeEnabled },
+        )
+
+        coordinator.execute(7, false, now)
+
+        assertFalse(startedSnoozeEnabled)
     }
 
     @Test
@@ -75,7 +89,7 @@ class AlarmExecutionCoordinatorTest {
         alarm: Alarm? = Alarm(7, "출근", 7, 0, 31, true, true),
         decision: AlarmExecutionDecision = AlarmExecutionDecision.RING,
         onSchedule: () -> Unit = {},
-        onRing: (String?) -> Unit = {},
+        onRing: (String?, Boolean) -> Unit = { _, _ -> },
     ) = AlarmExecutionCoordinator(
         repository = Repository(alarm),
         scheduler = Scheduler(onSchedule),
@@ -87,8 +101,9 @@ class AlarmExecutionCoordinatorTest {
                 alarmName: String,
                 ringtoneUri: String?,
                 gradualVolume: Boolean,
+                snoozeEnabled: Boolean,
                 snoozeMinutes: Int,
-            ) = onRing(ringtoneUri)
+            ) = onRing(ringtoneUri, snoozeEnabled)
         },
         zoneId = zone,
     )

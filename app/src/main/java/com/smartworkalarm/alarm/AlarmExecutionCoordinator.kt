@@ -57,7 +57,14 @@ class AlarmExecutionCoordinator internal constructor(
             AlarmExecutionDecision.RING,
             AlarmExecutionDecision.RING_WITH_CALENDAR_WARNING,
             -> {
-                ringer.start(alarm.id, alarm.name, alarm.ringtoneUri, alarm.gradualVolume, alarm.snoozeMinutes)
+                ringer.start(
+                    alarm.id,
+                    alarm.name,
+                    alarm.ringtoneUri,
+                    alarm.gradualVolume,
+                    alarm.snoozeEnabled,
+                    alarm.snoozeMinutes,
+                )
                 ExecutionOutcome.Ringing
             }
         }
