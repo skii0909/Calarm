@@ -11,7 +11,6 @@ import android.os.Handler
 import android.os.Looper
 import android.os.VibrationEffect
 import android.os.Vibrator
-import android.widget.Toast
 import androidx.core.content.getSystemService
 import com.smartworkalarm.domain.repository.AlarmScheduler
 import com.smartworkalarm.domain.repository.ScheduleResult
@@ -45,37 +44,54 @@ class AlarmRingingService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_START -> startRinging(intent)
-            ACTION_DISMISS -> {
-                ringingSessionState.dismiss()
-                stopRinging()
-            }
-            ACTION_SNOOZE -> when (
-                ringingSessionState.requestSnooze(intent.action, ::scheduleSnooze)
-            ) {
-                SnoozeRequestOutcome.Scheduled -> stopRinging()
-                SnoozeRequestOutcome.Failed -> {
-                    publishActionFailure("다시 울림을 예약하지 못했습니다. 다시 시도하거나 알람을 해제해 주세요.")
-                }
-                SnoozeRequestOutcome.Rejected -> Unit
-            }
+            ACTION_DISMISS -> handleDismiss(intent)
+            ACTION_SNOOZE -> handleSnooze(intent)
             else -> Unit
         }
         return START_NOT_STICKY
     }
 
+    private fun handleDismiss(intent: Intent) {
+        val key = intent.ringingSessionKey() ?: return
+        val result = ringingSessionState.dismiss(key)
+        publishTerminalActionResult(
+            key = key,
+            result = result,
+            message = if (result == TerminalActionResult.REJECTED) STALE_ACTION_MESSAGE else null,
+        )
+        if (result == TerminalActionResult.SUCCESS) stopRinging()
+    }
+
+    private fun handleSnooze(intent: Intent) {
+        val key = intent.ringingSessionKey() ?: return
+        val result = ringingSessionState.requestSnooze(key, ::scheduleSnooze)
+        val message = when (result) {
+            TerminalActionResult.SUCCESS -> null
+            TerminalActionResult.REJECTED -> STALE_ACTION_MESSAGE
+            TerminalActionResult.FAILED -> SNOOZE_FAILURE_MESSAGE
+        }
+        publishTerminalActionResult(key, result, message)
+        if (result == TerminalActionResult.SUCCESS) stopRinging()
+    }
+
     private fun startRinging(intent: Intent) {
-        val session = ActiveRingingSession(
+        alarmTerminalResultStore.clear()
+        val key = intent.ringingSessionKey() ?: RingingSessionKey.create(
             alarmId = intent.getLongExtra(AlarmSchedulerImpl.EXTRA_ALARM_ID, -1L),
             isShiftAlarm = intent.getBooleanExtra(EXTRA_IS_SHIFT_ALARM, false),
+            scheduledOccurrenceAt = intent.scheduledOccurrenceAt(),
+        )
+        val session = ActiveRingingSession(
+            key = key,
             snoozeEnabled = intent.getBooleanExtra(EXTRA_SNOOZE_ENABLED, true),
             snoozeMinutes = intent.getIntExtra(EXTRA_SNOOZE_MINUTES, 5).coerceIn(5, 30),
-            scheduledOccurrenceAt = intent.scheduledOccurrenceAt(),
         )
         ringingSessionState.start(session)
         val name = intent.getStringExtra(EXTRA_ALARM_NAME) ?: "알람"
         startForeground(
             NOTIFICATION_ID,
             notificationFactory.create(
+                session.key,
                 session.alarmId,
                 name,
                 session.isShiftAlarm,
@@ -142,12 +158,26 @@ class AlarmRingingService : Service() {
         stopSelf()
     }
 
-    private fun publishActionFailure(message: String) {
-        Toast.makeText(this, message, Toast.LENGTH_LONG).show()
+    private fun publishTerminalActionResult(
+        key: RingingSessionKey,
+        result: TerminalActionResult,
+        message: String?,
+    ) {
+        alarmTerminalResultStore.publish(
+            AlarmTerminalServiceResult(key, result, message),
+        )
+        sendBroadcast(
+            Intent(ACTION_TERMINAL_RESULT)
+                .setPackage(packageName)
+                .apply {
+                    putRingingSessionKey(key)
+                    putTerminalActionResult(result, message)
+                },
+        )
     }
 
     override fun onDestroy() {
-        ringingSessionState.dismiss()
+        ringingSessionState.clear()
         volumeHandler.removeCallbacks(volumeRamp)
         player?.runCatching { stop() }
         player?.release()
@@ -160,6 +190,7 @@ class AlarmRingingService : Service() {
         const val ACTION_START = "com.smartworkalarm.action.START_RINGING"
         const val ACTION_DISMISS = "com.smartworkalarm.action.DISMISS"
         const val ACTION_SNOOZE = "com.smartworkalarm.action.SNOOZE"
+        const val ACTION_TERMINAL_RESULT = "com.smartworkalarm.action.TERMINAL_RESULT"
         const val EXTRA_ALARM_NAME = "alarm_name"
         const val EXTRA_RINGTONE_URI = "ringtone_uri"
         const val EXTRA_GRADUAL_VOLUME = "gradual_volume"
@@ -167,7 +198,14 @@ class AlarmRingingService : Service() {
         const val EXTRA_SNOOZE_MINUTES = "snooze_minutes"
         const val EXTRA_IS_SHIFT_ALARM = "is_shift_alarm"
         const val EXTRA_CALENDAR_WARNING = "calendar_warning"
+        const val EXTRA_RINGING_SESSION_KEY = "ringing_session_key"
+        const val EXTRA_TERMINAL_ACTION_RESULT = "terminal_action_result"
+        const val EXTRA_TERMINAL_ACTION_MESSAGE = "terminal_action_message"
         private const val NOTIFICATION_ID = 7001
+        private const val STALE_ACTION_MESSAGE =
+            "현재 울리는 알람과 일치하지 않습니다. 새 알람 화면에서 다시 시도해 주세요."
+        private const val SNOOZE_FAILURE_MESSAGE =
+            "다시 울림을 예약하지 못했습니다. 다시 시도하거나 알람을 해제해 주세요."
     }
 }
 

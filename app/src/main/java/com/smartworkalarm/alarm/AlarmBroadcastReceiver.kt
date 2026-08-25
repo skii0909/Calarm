@@ -29,11 +29,11 @@ class AlarmBroadcastReceiver : BroadcastReceiver() {
         CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
             try {
                 val now = clock.instant()
+                val scheduledOccurrenceAt = intent.getLongExtra(
+                    AlarmSchedulerImpl.EXTRA_SCHEDULED_OCCURRENCE_AT,
+                    Long.MIN_VALUE,
+                ).takeIf { it != Long.MIN_VALUE }?.let(Instant::ofEpochMilli) ?: now
                 if (isShift) {
-                    val scheduledOccurrenceAt = intent.getLongExtra(
-                        AlarmSchedulerImpl.EXTRA_SCHEDULED_OCCURRENCE_AT,
-                        Long.MIN_VALUE,
-                    ).takeIf { it != Long.MIN_VALUE }?.let(Instant::ofEpochMilli) ?: now
                     shiftCoordinator.execute(
                         alarmId,
                         intent.getBooleanExtra(AlarmSchedulerImpl.EXTRA_IS_SNOOZE, false),
@@ -45,6 +45,7 @@ class AlarmBroadcastReceiver : BroadcastReceiver() {
                         alarmId,
                         intent.getBooleanExtra(AlarmSchedulerImpl.EXTRA_IS_SNOOZE, false),
                         now,
+                        scheduledOccurrenceAt,
                     )
                 }
             } finally {

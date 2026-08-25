@@ -16,7 +16,8 @@ class AlarmNotificationFactory @Inject constructor(
     @param:ApplicationContext private val context: Context,
     private val notificationManager: NotificationManager,
 ) {
-    fun create(
+    internal fun create(
+        sessionKey: RingingSessionKey,
         alarmId: Long,
         name: String,
         isShiftAlarm: Boolean = false,
@@ -31,7 +32,8 @@ class AlarmNotificationFactory @Inject constructor(
             FULL_SCREEN_REQUEST_CODE,
             Intent(context, AlarmActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-                data = Uri.parse(fullScreenIntentIdentity(alarmId, isShiftAlarm))
+                data = Uri.parse(fullScreenIntentIdentity(sessionKey))
+                putRingingSessionKey(sessionKey)
                 putExtra(AlarmSchedulerImpl.EXTRA_ALARM_ID, alarmId)
                 putExtra(EXTRA_ALARM_NAME, name)
                 putExtra(AlarmRingingService.EXTRA_IS_SHIFT_ALARM, isShiftAlarm)
@@ -88,6 +90,10 @@ internal fun applyRingingChannelPolicy(
 }
 
 internal fun fullScreenIntentIdentity(alarmId: Long, isShiftAlarm: Boolean): String {
-    val namespace = if (isShiftAlarm) "shift" else "ordinary"
-    return "smartworkalarm://ringing/$namespace/$alarmId"
+    return fullScreenIntentIdentity(
+        RingingSessionKey.create(isShiftAlarm, alarmId, scheduledOccurrenceAt = null),
+    )
 }
+
+internal fun fullScreenIntentIdentity(sessionKey: RingingSessionKey): String =
+    "smartworkalarm://ringing/${sessionKey.encode()}"

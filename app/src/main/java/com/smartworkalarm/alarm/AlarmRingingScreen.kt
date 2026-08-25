@@ -1,14 +1,14 @@
 package com.smartworkalarm.alarm
 
 import android.provider.Settings
-import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.VectorConverter
 import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.animateValueAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -38,12 +38,16 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
@@ -52,7 +56,6 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -60,6 +63,7 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
@@ -69,9 +73,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 import kotlin.math.roundToInt
@@ -79,6 +80,7 @@ import kotlin.math.roundToInt
 internal const val ALARM_TITLE_TAG = "alarm_title"
 internal const val SNOOZE_HOLD_TAG = "snooze_hold"
 internal const val DISMISS_HANDLE_TAG = "dismiss_handle"
+internal const val ALARM_ACTION_ERROR_TAG = "alarm_action_error"
 
 private val NightTop = Color(0xFF102846)
 private val NightMiddle = Color(0xFF07111F)
@@ -91,37 +93,68 @@ private val WarningText = Color(0xFFFFC76B)
 @Composable
 internal fun AlarmRingingScreen(
     presentation: AlarmPresentation,
+    actionsEnabled: Boolean = true,
+    persistentError: String? = null,
+    animationsDisabledOverride: Boolean? = null,
     onDismiss: () -> Unit,
     onSnooze: () -> Unit,
 ) {
-    val animationsDisabled = animationsDisabled()
-    Box(
+    val animationsDisabled = animationsDisabledOverride ?: animationsDisabled()
+    val density = LocalDensity.current
+    BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
             .background(Brush.verticalGradient(listOf(NightTop, NightMiddle, NightBottom)))
             .windowInsetsPadding(WindowInsets.safeDrawing)
             .padding(horizontal = 24.dp, vertical = 20.dp),
     ) {
-        Column(
-            modifier = Modifier.fillMaxSize(),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            AlarmIdentityZone(
-                presentation = presentation,
-                modifier = Modifier.weight(if (presentation.snoozeEnabled) 1f else 1.15f),
+        val dismissThresholdPx = with(density) {
+            dismissThresholdPx(
+                safeWidthPx = maxWidth.toPx(),
+                safeHeightPx = maxHeight.toPx(),
+                density = density.density,
             )
-            if (presentation.snoozeEnabled) {
-                HoldToSnoozeZone(
-                    snoozeMinutes = presentation.snoozeMinutes,
-                    onSnooze = onSnooze,
-                    modifier = Modifier.weight(1f),
+        }
+        key(
+            presentation.sessionKey,
+            presentation.alarmId,
+            presentation.scheduledOccurrenceAt,
+        ) {
+            Column(
+                modifier = Modifier.fillMaxSize(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                AlarmIdentityZone(
+                    presentation = presentation,
+                    modifier = Modifier.weight(if (presentation.snoozeEnabled) 1f else 1.15f),
+                )
+                persistentError?.let { message ->
+                    Text(
+                        text = message,
+                        color = WarningText,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 6.dp)
+                            .testTag(ALARM_ACTION_ERROR_TAG),
+                    )
+                }
+                if (presentation.snoozeEnabled) {
+                    HoldToSnoozeZone(
+                        snoozeMinutes = presentation.snoozeMinutes,
+                        actionsEnabled = actionsEnabled,
+                        onSnooze = onSnooze,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+                DragToDismissZone(
+                    animationsDisabled = animationsDisabled,
+                    actionsEnabled = actionsEnabled,
+                    thresholdPx = dismissThresholdPx,
+                    onDismiss = onDismiss,
+                    modifier = Modifier.weight(if (presentation.snoozeEnabled) 1.15f else 1.85f),
                 )
             }
-            DragToDismissZone(
-                animationsDisabled = animationsDisabled,
-                onDismiss = onDismiss,
-                modifier = Modifier.weight(if (presentation.snoozeEnabled) 1.15f else 1.85f),
-            )
         }
     }
 }
@@ -191,27 +224,33 @@ private fun AlarmIdentityZone(
 @Composable
 private fun HoldToSnoozeZone(
     snoozeMinutes: Int,
+    actionsEnabled: Boolean,
     onSnooze: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val haptic = LocalHapticFeedback.current
     val currentOnSnooze by rememberUpdatedState(onSnooze)
     var isHolding by remember { mutableStateOf(false) }
-    val holdProgress by animateFloatAsState(
-        targetValue = if (isHolding) 1f else 0f,
-        animationSpec = tween(durationMillis = if (isHolding) SNOOZE_HOLD_MILLIS.toInt() else 180),
-        label = "snooze hold progress",
-    )
+    var holdProgress by remember { mutableFloatStateOf(0f) }
     val clampedMinutes = snoozeMinutes.coerceIn(5, 30)
     val accessibilityLabel = "${clampedMinutes}분 후 다시 울림, 3초간 길게 누르기"
 
-    LaunchedEffect(isHolding) {
-        if (isHolding) {
-            delay(SNOOZE_HOLD_MILLIS)
-            if (isHolding) {
+    LaunchedEffect(isHolding, actionsEnabled) {
+        if (!isHolding || !actionsEnabled) {
+            holdProgress = 0f
+            return@LaunchedEffect
+        }
+        val startedAtNanos = withFrameNanos { it }
+        while (isHolding && actionsEnabled) {
+            val elapsedMillis = (withFrameNanos { it } - startedAtNanos)
+                .coerceAtLeast(0L) / 1_000_000L
+            holdProgress = snoozeHoldProgress(elapsedMillis)
+            if (elapsedMillis >= SNOOZE_HOLD_MILLIS) {
                 isHolding = false
+                holdProgress = 1f
                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                 currentOnSnooze()
+                break
             }
         }
     }
@@ -222,20 +261,32 @@ private fun HoldToSnoozeZone(
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = 8.dp, vertical = 10.dp)
+            .alpha(if (actionsEnabled) 1f else 0.55f)
             .testTag(SNOOZE_HOLD_TAG)
             .semantics(mergeDescendants = true) {
                 contentDescription = accessibilityLabel
                 role = Role.Button
+                if (!actionsEnabled) disabled()
             }
-            .pointerInput(Unit) {
-                detectTapGestures(
-                    onPress = {
-                        isHolding = true
-                        tryAwaitRelease()
-                        isHolding = false
-                    },
-                )
-            },
+            .then(
+                if (actionsEnabled) {
+                    Modifier.pointerInput(actionsEnabled) {
+                        detectTapGestures(
+                            onPress = {
+                                isHolding = true
+                                try {
+                                    tryAwaitRelease()
+                                } finally {
+                                    isHolding = false
+                                    holdProgress = 0f
+                                }
+                            },
+                        )
+                    }
+                } else {
+                    Modifier
+                },
+            ),
     ) {
         Row(
             modifier = Modifier
@@ -283,33 +334,50 @@ private fun HoldToSnoozeZone(
 @Composable
 private fun DragToDismissZone(
     animationsDisabled: Boolean,
+    actionsEnabled: Boolean,
+    thresholdPx: Float,
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val density = LocalDensity.current
     val haptic = LocalHapticFeedback.current
     val currentOnDismiss by rememberUpdatedState(onDismiss)
-    val dragOffset = remember { Animatable(Offset.Zero, Offset.VectorConverter) }
-    val infiniteTransition = rememberInfiniteTransition(label = "alarm pulse")
-    val animatedPulse by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 2_100),
-            repeatMode = RepeatMode.Restart,
-        ),
-        label = "pulse phase",
+    var dragTarget by remember { mutableStateOf(Offset.Zero) }
+    var isDragging by remember { mutableStateOf(false) }
+    val dragOffset by animateValueAsState(
+        targetValue = dragTarget,
+        typeConverter = Offset.VectorConverter,
+        animationSpec = if (isDragging) {
+            snap()
+        } else {
+            spring(
+                dampingRatio = Spring.DampingRatioMediumBouncy,
+                stiffness = Spring.StiffnessMediumLow,
+            )
+        },
+        label = "dismiss drag offset",
     )
+    val animatedPulse = if (animationsDisabled) {
+        0.32f
+    } else {
+        val infiniteTransition = rememberInfiniteTransition(label = "alarm pulse")
+        val pulse by infiniteTransition.animateFloat(
+            initialValue = 0f,
+            targetValue = 1f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(durationMillis = 2_100),
+                repeatMode = RepeatMode.Restart,
+            ),
+            label = "pulse phase",
+        )
+        pulse
+    }
 
     BoxWithConstraints(
         modifier = modifier.fillMaxWidth(),
         contentAlignment = Alignment.Center,
     ) {
-        val thresholdPx = with(density) {
-            (minOf(maxWidth, maxHeight).toPx() * 0.28f).coerceAtLeast(96.dp.toPx())
-        }
-        val progress = dismissProgress(dragOffset.value.getDistance(), thresholdPx)
-        val pulse = if (animationsDisabled) 0.32f else animatedPulse
+        val progress = dismissProgress(dragOffset.getDistance(), thresholdPx)
+        val pulse = animatedPulse
         val ringColor = lerp(AlarmBlue, AlarmMint, progress)
 
         Box(
@@ -341,11 +409,12 @@ private fun DragToDismissZone(
                 modifier = Modifier
                     .offset {
                         IntOffset(
-                            x = dragOffset.value.x.roundToInt(),
-                            y = dragOffset.value.y.roundToInt(),
+                            x = dragOffset.x.roundToInt(),
+                            y = dragOffset.y.roundToInt(),
                         )
                     }
                     .size(156.dp)
+                    .alpha(if (actionsEnabled) 1f else 0.55f)
                     .background(
                         Brush.radialGradient(
                             listOf(ringColor, AlarmBlue.copy(alpha = 0.88f)),
@@ -356,62 +425,62 @@ private fun DragToDismissZone(
                     .semantics {
                         contentDescription = "알람 해제"
                         role = Role.Button
-                        onClick(label = "알람 해제") {
-                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                            currentOnDismiss()
-                            true
+                        if (actionsEnabled) {
+                            onClick(label = "알람 해제") {
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                currentOnDismiss()
+                                true
+                            }
+                        } else {
+                            disabled()
                         }
                     }
-                    .pointerInput(thresholdPx) {
-                        coroutineScope {
-                            awaitEachGesture {
-                                val down = awaitFirstDown(requireUnconsumed = false)
-                                launch {
-                                    dragOffset.stop()
-                                    dragOffset.snapTo(Offset.Zero)
-                                }
-                                var totalDrag = Offset.Zero
-                                var completed = false
-                                var cancelled = false
+                    .then(
+                        if (actionsEnabled) {
+                            Modifier.pointerInput(thresholdPx, actionsEnabled) {
+                                try {
+                                    awaitEachGesture {
+                                        val down = awaitFirstDown(requireUnconsumed = false)
+                                        isDragging = true
+                                        dragTarget = Offset.Zero
+                                        var completed = false
 
-                                while (!completed && !cancelled) {
-                                    val event = awaitPointerEvent()
-                                    if (event.changes.size != 1) {
-                                        cancelled = true
-                                        continue
-                                    }
-                                    val change = event.changes.firstOrNull { it.id == down.id }
-                                    if (change == null) {
-                                        cancelled = true
-                                        continue
-                                    }
-                                    if (!change.pressed) break
+                                        while (!completed) {
+                                            val event = awaitPointerEvent()
+                                            if (event.changes.size != 1) break
+                                            val change = event.changes.firstOrNull { it.id == down.id }
+                                                ?: break
+                                            val sample = resolveDragSample(
+                                                downPosition = down.position,
+                                                currentPosition = change.position,
+                                                thresholdPx = thresholdPx,
+                                                cancelled = false,
+                                            )
+                                            dragTarget = sample.offset
+                                            change.consume()
+                                            if (sample.dismiss) {
+                                                completed = true
+                                                haptic.performHapticFeedback(
+                                                    HapticFeedbackType.LongPress,
+                                                )
+                                                currentOnDismiss()
+                                            } else if (!change.pressed) {
+                                                break
+                                            }
+                                        }
 
-                                    totalDrag += change.positionChange()
-                                    change.consume()
-                                    val dragAtEvent = totalDrag
-                                    launch { dragOffset.snapTo(dragAtEvent) }
-                                    if (shouldDismiss(totalDrag.getDistance(), thresholdPx)) {
-                                        completed = true
-                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                        currentOnDismiss()
+                                        isDragging = false
+                                        dragTarget = Offset.Zero
                                     }
-                                }
-
-                                if (!completed) {
-                                    launch {
-                                        dragOffset.animateTo(
-                                            targetValue = Offset.Zero,
-                                            animationSpec = spring(
-                                                dampingRatio = Spring.DampingRatioMediumBouncy,
-                                                stiffness = Spring.StiffnessMediumLow,
-                                            ),
-                                        )
-                                    }
+                                } finally {
+                                    isDragging = false
+                                    dragTarget = Offset.Zero
                                 }
                             }
-                        }
-                    },
+                        } else {
+                            Modifier
+                        },
+                    ),
                 contentAlignment = Alignment.Center,
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {

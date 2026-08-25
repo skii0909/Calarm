@@ -43,7 +43,12 @@ class AlarmExecutionCoordinator internal constructor(
         zoneId,
     )
 
-    suspend fun execute(alarmId: Long, isSnooze: Boolean, now: Instant): ExecutionOutcome {
+    suspend fun execute(
+        alarmId: Long,
+        isSnooze: Boolean,
+        now: Instant,
+        scheduledOccurrenceAt: Instant = now,
+    ): ExecutionOutcome {
         val alarm = repository.getById(alarmId) ?: return ExecutionOutcome.Ignored
         if (!alarm.enabled) return ExecutionOutcome.Ignored
 
@@ -57,13 +62,14 @@ class AlarmExecutionCoordinator internal constructor(
             AlarmExecutionDecision.RING,
             AlarmExecutionDecision.RING_WITH_CALENDAR_WARNING,
             -> {
-                ringer.start(
+                ringer.startAt(
                     alarm.id,
                     alarm.name,
                     alarm.ringtoneUri,
                     alarm.gradualVolume,
                     alarm.snoozeEnabled,
                     alarm.snoozeMinutes,
+                    scheduledOccurrenceAt,
                 )
                 ExecutionOutcome.Ringing
             }

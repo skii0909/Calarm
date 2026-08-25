@@ -1,6 +1,9 @@
 package com.smartworkalarm.alarm
 
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.os.Build
 import android.os.Bundle
 import android.view.WindowManager
@@ -8,15 +11,35 @@ import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.compose.setContent
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.core.content.ContextCompat
 import com.smartworkalarm.presentation.theme.WorkAlarmTheme
 import dagger.hilt.android.AndroidEntryPoint
+import java.time.Instant
 
 @AndroidEntryPoint
 class AlarmActivity : ComponentActivity() {
     private val presentationState = AlarmPresentationState()
-    private val terminalActionGate = TerminalAlarmActionGate()
+    private lateinit var terminalActionController: AlarmTerminalActionController
+    private var terminalResultReceiverRegistered = false
+    private val terminalResultReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action != AlarmRingingService.ACTION_TERMINAL_RESULT) return
+            val resultKey = intent.ringingSessionKey() ?: return
+            val result = intent.terminalActionResult() ?: return
+            val serviceResult = alarmTerminalResultStore.take(resultKey)
+                ?: AlarmTerminalServiceResult(
+                    sessionKey = resultKey,
+                    result = result,
+                    message = intent.getStringExtra(
+                        AlarmRingingService.EXTRA_TERMINAL_ACTION_MESSAGE,
+                    ),
+                )
+            acceptServiceResult(serviceResult)
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -37,14 +60,37 @@ class AlarmActivity : ComponentActivity() {
             },
         )
         presentationState.replace(IntentAlarmPayload(intent))
+        val initialSessionKey = presentationState.current.sessionKey
+        if (initialSessionKey == null) {
+            finish()
+            return
+        }
+        terminalActionController = AlarmTerminalActionController(initialSessionKey)
+        ContextCompat.registerReceiver(
+            this,
+            terminalResultReceiver,
+            IntentFilter(AlarmRingingService.ACTION_TERMINAL_RESULT),
+            ContextCompat.RECEIVER_NOT_EXPORTED,
+        )
+        terminalResultReceiverRegistered = true
+        alarmTerminalResultStore.take(initialSessionKey)?.let(::acceptServiceResult)
+        if (isFinishing) return
         setContent {
             val presentation = presentationState.current
+            val terminalState = terminalActionController.state
+            val isCurrentSession = presentation.sessionKey == terminalState.sessionKey
             WorkAlarmTheme {
-                AlarmRingingScreen(
-                    presentation = presentation,
-                    onSnooze = { send(ACTION_SNOOZE, presentationState.current) },
-                    onDismiss = { send(ACTION_DISMISS, presentationState.current) },
-                )
+                key(presentation.sessionKey) {
+                    AlarmRingingScreen(
+                        presentation = presentation,
+                        actionsEnabled = isCurrentSession && terminalState.actionsEnabled,
+                        persistentError = terminalState.persistentError.takeIf {
+                            isCurrentSession
+                        },
+                        onSnooze = { send(ACTION_SNOOZE, presentation) },
+                        onDismiss = { send(ACTION_DISMISS, presentation) },
+                    )
+                }
             }
         }
     }
@@ -53,13 +99,16 @@ class AlarmActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         presentationState.replace(IntentAlarmPayload(intent))
+        presentationState.current.sessionKey?.let(terminalActionController::replaceSession)
     }
 
     private fun send(action: String, presentation: AlarmPresentation) {
-        if (!terminalActionGate.tryAcquire()) return
+        val sessionKey = presentation.sessionKey ?: return
+        if (!terminalActionController.tryStartRequest(sessionKey)) return
 
         val serviceIntent = Intent(this, AlarmRingingService::class.java).apply {
             this.action = action
+            putRingingSessionKey(sessionKey)
             putExtra(AlarmSchedulerImpl.EXTRA_ALARM_ID, presentation.alarmId)
             putExtra(AlarmRingingService.EXTRA_IS_SHIFT_ALARM, presentation.isShiftAlarm)
             putExtra(AlarmRingingService.EXTRA_ALARM_NAME, presentation.alarmName)
@@ -75,11 +124,35 @@ class AlarmActivity : ComponentActivity() {
         }
         try {
             startService(serviceIntent)
-            finish()
         } catch (error: RuntimeException) {
-            terminalActionGate.release()
-            throw error
+            terminalActionController.acceptDispatchFailure(
+                sessionKey,
+                "알람 서비스에 요청을 보내지 못했습니다. 다시 시도해 주세요.",
+            )
         }
+    }
+
+    private fun acceptServiceResult(serviceResult: AlarmTerminalServiceResult) {
+        when (
+            terminalActionController.acceptServiceResult(
+                resultKey = serviceResult.sessionKey,
+                result = serviceResult.result,
+                message = serviceResult.message,
+            )
+        ) {
+            AlarmTerminalUiEffect.FINISH -> finish()
+            AlarmTerminalUiEffect.IGNORE,
+            AlarmTerminalUiEffect.STAY_OPEN,
+            -> Unit
+        }
+    }
+
+    override fun onDestroy() {
+        if (terminalResultReceiverRegistered) {
+            unregisterReceiver(terminalResultReceiver)
+            terminalResultReceiverRegistered = false
+        }
+        super.onDestroy()
     }
 
     companion object {
@@ -89,6 +162,7 @@ class AlarmActivity : ComponentActivity() {
 }
 
 internal data class AlarmPresentation(
+    val sessionKey: RingingSessionKey? = null,
     val alarmId: Long = -1L,
     val isShiftAlarm: Boolean = false,
     val alarmName: String = "알람",
@@ -114,18 +188,38 @@ internal class AlarmPresentationState {
     }
 }
 
-internal fun parseAlarmPresentation(payload: AlarmPayload): AlarmPresentation = AlarmPresentation(
-    alarmId = payload.getLong(AlarmSchedulerImpl.EXTRA_ALARM_ID, -1L),
-    isShiftAlarm = payload.getBoolean(AlarmRingingService.EXTRA_IS_SHIFT_ALARM, false),
-    alarmName = payload.getString(AlarmNotificationFactory.EXTRA_ALARM_NAME) ?: "알람",
-    calendarWarning = payload.getBoolean(AlarmRingingService.EXTRA_CALENDAR_WARNING, false),
-    snoozeEnabled = payload.getBoolean(AlarmRingingService.EXTRA_SNOOZE_ENABLED, true),
-    snoozeMinutes = payload.getInt(AlarmRingingService.EXTRA_SNOOZE_MINUTES, 5).coerceIn(5, 30),
-    scheduledOccurrenceAt = payload.getLong(
+internal fun parseAlarmPresentation(payload: AlarmPayload): AlarmPresentation {
+    val alarmId = payload.getLong(AlarmSchedulerImpl.EXTRA_ALARM_ID, -1L)
+    val isShiftAlarm = payload.getBoolean(AlarmRingingService.EXTRA_IS_SHIFT_ALARM, false)
+    val scheduledOccurrenceAt = payload.getLong(
         AlarmSchedulerImpl.EXTRA_SCHEDULED_OCCURRENCE_AT,
         Long.MIN_VALUE,
-    ),
-)
+    )
+    val encodedSessionKey = payload.getString(AlarmRingingService.EXTRA_RINGING_SESSION_KEY)
+    val sessionKey = RingingSessionKey.decode(encodedSessionKey) ?: if (
+        encodedSessionKey == null && alarmId >= 0L
+    ) {
+        RingingSessionKey.create(
+            isShiftAlarm = isShiftAlarm,
+            alarmId = alarmId,
+            scheduledOccurrenceAt = scheduledOccurrenceAt
+                .takeIf { it != Long.MIN_VALUE }
+                ?.let(Instant::ofEpochMilli),
+        )
+    } else {
+        null
+    }
+    return AlarmPresentation(
+        sessionKey = sessionKey,
+        alarmId = alarmId,
+        isShiftAlarm = isShiftAlarm,
+        alarmName = payload.getString(AlarmNotificationFactory.EXTRA_ALARM_NAME) ?: "알람",
+        calendarWarning = payload.getBoolean(AlarmRingingService.EXTRA_CALENDAR_WARNING, false),
+        snoozeEnabled = payload.getBoolean(AlarmRingingService.EXTRA_SNOOZE_ENABLED, true),
+        snoozeMinutes = payload.getInt(AlarmRingingService.EXTRA_SNOOZE_MINUTES, 5).coerceIn(5, 30),
+        scheduledOccurrenceAt = scheduledOccurrenceAt,
+    )
+}
 
 private class IntentAlarmPayload(private val intent: Intent) : AlarmPayload {
     override fun getLong(key: String, defaultValue: Long): Long = intent.getLongExtra(key, defaultValue)

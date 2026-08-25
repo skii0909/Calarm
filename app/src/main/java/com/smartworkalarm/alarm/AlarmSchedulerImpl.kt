@@ -23,8 +23,8 @@ class AlarmSchedulerImpl @Inject constructor(
         scheduleExact(alarmId, triggerAt, snooze = true)
 
     override fun cancel(alarmId: Long) {
-        alarmManager.cancel(pendingIntent(alarmId, snooze = false))
-        alarmManager.cancel(pendingIntent(alarmId, snooze = true))
+        alarmManager.cancel(pendingIntent(alarmId, snooze = false, Instant.EPOCH))
+        alarmManager.cancel(pendingIntent(alarmId, snooze = true, Instant.EPOCH))
     }
 
     override fun scheduleShift(shiftTypeId: Long, triggerAt: Instant): ScheduleResult =
@@ -46,7 +46,7 @@ class AlarmSchedulerImpl @Inject constructor(
         alarmManager.setExactAndAllowWhileIdle(
             AlarmManager.RTC_WAKEUP,
             triggerAt.toEpochMilli(),
-            pendingIntent(alarmId, snooze),
+            pendingIntent(alarmId, snooze, triggerAt),
         )
         return ScheduleResult.Scheduled
     }
@@ -66,11 +66,16 @@ class AlarmSchedulerImpl @Inject constructor(
         return ScheduleResult.Scheduled
     }
 
-    private fun pendingIntent(alarmId: Long, snooze: Boolean): PendingIntent {
+    private fun pendingIntent(
+        alarmId: Long,
+        snooze: Boolean,
+        scheduledOccurrenceAt: Instant,
+    ): PendingIntent {
         val intent = Intent(ACTION_ALARM).apply {
             setPackage(context.packageName)
             putExtra(EXTRA_ALARM_ID, alarmId)
             putExtra(EXTRA_IS_SNOOZE, snooze)
+            putExtra(EXTRA_SCHEDULED_OCCURRENCE_AT, scheduledOccurrenceAt.toEpochMilli())
         }
         val namespace = if (snooze) SNOOZE_REQUEST_OFFSET else 0
         return PendingIntent.getBroadcast(

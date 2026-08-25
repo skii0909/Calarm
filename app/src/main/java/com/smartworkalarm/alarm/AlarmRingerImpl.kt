@@ -31,6 +31,28 @@ class AlarmRingerImpl @Inject constructor(
         )
     }
 
+    override fun startAt(
+        alarmId: Long,
+        alarmName: String,
+        ringtoneUri: String?,
+        gradualVolume: Boolean,
+        snoozeEnabled: Boolean,
+        snoozeMinutes: Int,
+        scheduledOccurrenceAt: Instant,
+    ) {
+        startService(
+            alarmId,
+            alarmName,
+            ringtoneUri,
+            gradualVolume,
+            snoozeEnabled,
+            snoozeMinutes,
+            isShiftAlarm = false,
+            calendarWarning = false,
+            scheduledOccurrenceAt = scheduledOccurrenceAt,
+        )
+    }
+
     override fun startShift(
         shiftTypeId: Long,
         alarmName: String,
@@ -65,10 +87,16 @@ class AlarmRingerImpl @Inject constructor(
         calendarWarning: Boolean,
         scheduledOccurrenceAt: Instant?,
     ) {
+        val sessionKey = RingingSessionKey.create(
+            isShiftAlarm = isShiftAlarm,
+            alarmId = alarmId,
+            scheduledOccurrenceAt = scheduledOccurrenceAt,
+        )
         ContextCompat.startForegroundService(
             context,
             Intent(context, AlarmRingingService::class.java).apply {
                 action = AlarmRingingService.ACTION_START
+                putRingingSessionKey(sessionKey)
                 putExtra(AlarmSchedulerImpl.EXTRA_ALARM_ID, alarmId)
                 putExtra(AlarmRingingService.EXTRA_ALARM_NAME, alarmName)
                 putExtra(AlarmRingingService.EXTRA_RINGTONE_URI, ringtoneUri)

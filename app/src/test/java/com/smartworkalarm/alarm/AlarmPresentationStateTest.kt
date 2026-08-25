@@ -18,7 +18,10 @@ class AlarmPresentationStateTest {
                     AlarmRingingService.EXTRA_CALENDAR_WARNING to false,
                     AlarmRingingService.EXTRA_SNOOZE_ENABLED to true,
                 ),
-                strings = mapOf(AlarmNotificationFactory.EXTRA_ALARM_NAME to "첫 알람"),
+                strings = mapOf(
+                    AlarmNotificationFactory.EXTRA_ALARM_NAME to "첫 알람",
+                    AlarmRingingService.EXTRA_RINGING_SESSION_KEY to "regular:11:1111",
+                ),
                 ints = mapOf(AlarmRingingService.EXTRA_SNOOZE_MINUTES to 5),
             ),
         )
@@ -34,13 +37,21 @@ class AlarmPresentationStateTest {
                     AlarmRingingService.EXTRA_CALENDAR_WARNING to true,
                     AlarmRingingService.EXTRA_SNOOZE_ENABLED to false,
                 ),
-                strings = mapOf(AlarmNotificationFactory.EXTRA_ALARM_NAME to "두 번째 근무 알람"),
+                strings = mapOf(
+                    AlarmNotificationFactory.EXTRA_ALARM_NAME to "두 번째 근무 알람",
+                    AlarmRingingService.EXTRA_RINGING_SESSION_KEY to "shift:22:2222",
+                ),
                 ints = mapOf(AlarmRingingService.EXTRA_SNOOZE_MINUTES to 17),
             ),
         )
 
         assertEquals(
             AlarmPresentation(
+                sessionKey = RingingSessionKey.create(
+                    isShiftAlarm = true,
+                    alarmId = 22L,
+                    scheduledOccurrenceAt = java.time.Instant.ofEpochMilli(2_222L),
+                ),
                 alarmId = 22L,
                 isShiftAlarm = true,
                 alarmName = "두 번째 근무 알람",
@@ -50,6 +61,28 @@ class AlarmPresentationStateTest {
                 scheduledOccurrenceAt = 2_222L,
             ),
             state.current,
+        )
+    }
+
+    @Test
+    fun `legacy payload derives the same stable key from alarm identity`() {
+        val presentation = parseAlarmPresentation(
+            FakeAlarmPayload(
+                longs = mapOf(
+                    AlarmSchedulerImpl.EXTRA_ALARM_ID to 31L,
+                    AlarmSchedulerImpl.EXTRA_SCHEDULED_OCCURRENCE_AT to 9_999L,
+                ),
+                booleans = mapOf(AlarmRingingService.EXTRA_IS_SHIFT_ALARM to true),
+            ),
+        )
+
+        assertEquals(
+            RingingSessionKey.create(
+                isShiftAlarm = true,
+                alarmId = 31L,
+                scheduledOccurrenceAt = java.time.Instant.ofEpochMilli(9_999L),
+            ),
+            presentation.sessionKey,
         )
     }
 }

@@ -1,5 +1,6 @@
 package com.smartworkalarm.alarm
 
+import java.time.Instant
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
@@ -36,5 +37,21 @@ class AlarmNotificationPolicyTest {
             fullScreenIntentIdentity(firstId, isShiftAlarm = false),
             fullScreenIntentIdentity(firstId, isShiftAlarm = true),
         )
+    }
+
+    @Test
+    fun `full screen intent identity separates scheduled occurrences of one alarm`() {
+        val first = RingingSessionKey.create(
+            isShiftAlarm = false,
+            alarmId = 7L,
+            scheduledOccurrenceAt = Instant.parse("2026-08-25T00:00:00Z"),
+        )
+        val second = RingingSessionKey.create(
+            isShiftAlarm = false,
+            alarmId = 7L,
+            scheduledOccurrenceAt = Instant.parse("2026-08-26T00:00:00Z"),
+        )
+
+        assertNotEquals(fullScreenIntentIdentity(first), fullScreenIntentIdentity(second))
     }
 }

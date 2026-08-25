@@ -79,6 +79,17 @@ class AlarmExecutionCoordinatorTest {
     }
 
     @Test
+    fun `regular ringing carries scheduled occurrence into session start`() = runTest {
+        var startedOccurrence: Instant? = null
+        val coordinator = coordinator(onRingAt = { startedOccurrence = it })
+        val scheduledOccurrence = now.minusSeconds(37L)
+
+        coordinator.execute(7, false, now, scheduledOccurrence)
+
+        assertEquals(scheduledOccurrence, startedOccurrence)
+    }
+
+    @Test
     fun `missing alarm is ignored`() = runTest {
         val coordinator = coordinator(alarm = null)
 
@@ -90,6 +101,7 @@ class AlarmExecutionCoordinatorTest {
         decision: AlarmExecutionDecision = AlarmExecutionDecision.RING,
         onSchedule: () -> Unit = {},
         onRing: (String?, Boolean) -> Unit = { _, _ -> },
+        onRingAt: (Instant) -> Unit = {},
     ) = AlarmExecutionCoordinator(
         repository = Repository(alarm),
         scheduler = Scheduler(onSchedule),
@@ -104,6 +116,19 @@ class AlarmExecutionCoordinatorTest {
                 snoozeEnabled: Boolean,
                 snoozeMinutes: Int,
             ) = onRing(ringtoneUri, snoozeEnabled)
+
+            override fun startAt(
+                alarmId: Long,
+                alarmName: String,
+                ringtoneUri: String?,
+                gradualVolume: Boolean,
+                snoozeEnabled: Boolean,
+                snoozeMinutes: Int,
+                scheduledOccurrenceAt: Instant,
+            ) {
+                onRing(ringtoneUri, snoozeEnabled)
+                onRingAt(scheduledOccurrenceAt)
+            }
         },
         zoneId = zone,
     )
