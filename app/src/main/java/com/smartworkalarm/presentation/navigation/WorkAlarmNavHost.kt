@@ -86,6 +86,7 @@ fun WorkAlarmNavHost(
                 viewModel = hiltViewModel(),
                 alarmId = entry.arguments?.getLong("alarmId") ?: 0L,
                 onDone = { navController.popBackStack() },
+                onBack = { navController.popBackStack() },
             )
         }
         composable(SETTINGS) {
@@ -106,6 +107,7 @@ fun WorkAlarmNavHost(
                 viewModel = hiltViewModel(),
                 groupId = routeGroupId,
                 onDone = { navController.popBackStack() },
+                onBack = { navController.popBackStack() },
                 onEditShiftType = { groupId, shiftTypeId ->
                     if (routeGroupId == 0L) {
                         navController.popBackStack()
@@ -127,6 +129,7 @@ fun WorkAlarmNavHost(
                 groupId = entry.arguments?.getLong("groupId") ?: 0L,
                 shiftTypeId = entry.arguments?.getLong("shiftTypeId") ?: 0L,
                 onDone = { navController.popBackStack() },
+                onBack = { navController.popBackStack() },
             )
         }
     }

@@ -50,9 +50,15 @@ import com.smartworkalarm.sound.SoundPreviewController
 import com.smartworkalarm.presentation.components.GradientHero
 import com.smartworkalarm.presentation.components.NightPulseSection
 import com.smartworkalarm.presentation.components.DayToggle
+import com.smartworkalarm.presentation.components.UnsavedChangesBackHandler
 
 @Composable
-fun AlarmEditScreen(viewModel: AlarmEditViewModel, alarmId: Long, onDone: () -> Unit) {
+fun AlarmEditScreen(
+    viewModel: AlarmEditViewModel,
+    alarmId: Long,
+    onDone: () -> Unit,
+    onBack: () -> Unit = onDone,
+) {
     val state by viewModel.state.collectAsState()
     val scrollState = rememberScrollState()
     val nameFocusRequester = remember { FocusRequester() }
@@ -64,6 +70,12 @@ fun AlarmEditScreen(viewModel: AlarmEditViewModel, alarmId: Long, onDone: () -> 
             nameFocusRequester.requestFocus()
         }
     }
+    UnsavedChangesBackHandler(
+        hasUnsavedChanges = state.hasUnsavedChanges,
+        onBack = onBack,
+        onSave = viewModel::save,
+        onDiscard = onBack,
+    )
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(scrollState).padding(horizontal = 18.dp, vertical = 10.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),

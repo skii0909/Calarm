@@ -1,7 +1,6 @@
 package com.smartworkalarm.presentation.shift
 
 import androidx.compose.foundation.clickable
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -41,6 +40,7 @@ import com.smartworkalarm.presentation.alarmedit.readableTextFieldColors
 import com.smartworkalarm.presentation.components.FeaturePill
 import com.smartworkalarm.presentation.components.GradientHero
 import com.smartworkalarm.presentation.components.NightPulseSection
+import com.smartworkalarm.presentation.components.UnsavedChangesBackHandler
 import com.smartworkalarm.presentation.calendar.calendarConnectionSummary
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -51,11 +51,20 @@ fun ShiftGroupScreen(
     groupId: Long,
     onDone: () -> Unit,
     onEditShiftType: (groupId: Long, shiftTypeId: Long) -> Unit,
+    onBack: () -> Unit = onDone,
 ) {
     val state by viewModel.state.collectAsState()
     LaunchedEffect(groupId) { viewModel.loadGroup(groupId) }
     LaunchedEffect(state.saved, state.deleted) { if (state.saved || state.deleted) onDone() }
-    BackHandler(enabled = state.isDraft) { viewModel.cancelDraft() }
+    val exitWithoutSaving = {
+        if (state.isDraft) viewModel.discardGroupChanges() else onBack()
+    }
+    UnsavedChangesBackHandler(
+        hasUnsavedChanges = state.hasUnsavedChanges,
+        onBack = exitWithoutSaving,
+        onSave = viewModel::saveGroup,
+        onDiscard = exitWithoutSaving,
+    )
     ShiftGroupScreen(
         state = state,
         onNameChanged = viewModel::onGroupNameChanged,

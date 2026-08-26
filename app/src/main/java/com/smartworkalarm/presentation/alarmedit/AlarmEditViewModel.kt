@@ -32,6 +32,7 @@ data class AlarmEditState(
     val nameError: String? = null,
     val repeatDaysError: String? = null,
     val saved: Boolean = false,
+    val hasUnsavedChanges: Boolean = false,
 )
 
 @HiltViewModel
@@ -42,12 +43,13 @@ class AlarmEditViewModel @Inject constructor(
 ) : ViewModel() {
     private val _state = MutableStateFlow(AlarmEditState())
     val state: StateFlow<AlarmEditState> = _state.asStateFlow()
+    private var baseline = AlarmEditState().editableSnapshot()
 
     fun load(id: Long) {
         if (id == 0L || _state.value.id == id) return
         viewModelScope.launch {
             repository.getById(id)?.let { alarm ->
-                _state.value = AlarmEditState(
+                val loaded = AlarmEditState(
                     id = alarm.id,
                     name = alarm.name,
                     hour = alarm.hour,
@@ -62,21 +64,25 @@ class AlarmEditViewModel @Inject constructor(
                     snoozeEnabled = alarm.snoozeEnabled,
                     snoozeMinutes = alarm.snoozeMinutes,
                 )
+                baseline = loaded.editableSnapshot()
+                _state.value = loaded
             }
         }
     }
 
-    fun onNameChanged(value: String) = _state.update { it.copy(name = value, nameError = null) }
-    fun onTimeChanged(hour: Int, minute: Int) = _state.update { it.copy(hour = hour.coerceIn(0, 23), minute = minute.coerceIn(0, 59)) }
-    fun onEnabledChanged(value: Boolean) = _state.update { it.copy(enabled = value) }
-    fun onSkipOnCalendarMatchChanged(value: Boolean) = _state.update { it.copy(skipOnCalendarMatch = value) }
-    fun onCalendarKeywordsChanged(value: String) = _state.update { it.copy(calendarKeywords = value) }
-    fun onRingtoneChanged(value: String?) = _state.update { it.copy(ringtoneUri = value) }
-    fun onSkipOnPublicHolidayChanged(value: Boolean) = _state.update { it.copy(skipOnPublicHoliday = value) }
-    fun onGradualVolumeChanged(value: Boolean) = _state.update { it.copy(gradualVolume = value) }
-    fun onSnoozeEnabledChanged(enabled: Boolean) = _state.update { it.copy(snoozeEnabled = enabled) }
-    fun onSnoozeMinutesChanged(value: Int) = _state.update { it.copy(snoozeMinutes = value.coerceIn(5, 30)) }
-    fun toggleDay(day: RepeatDay) = _state.update {
+    fun onNameChanged(value: String) = updateEditorState { it.copy(name = value, nameError = null) }
+    fun onTimeChanged(hour: Int, minute: Int) = updateEditorState {
+        it.copy(hour = hour.coerceIn(0, 23), minute = minute.coerceIn(0, 59))
+    }
+    fun onEnabledChanged(value: Boolean) = updateEditorState { it.copy(enabled = value) }
+    fun onSkipOnCalendarMatchChanged(value: Boolean) = updateEditorState { it.copy(skipOnCalendarMatch = value) }
+    fun onCalendarKeywordsChanged(value: String) = updateEditorState { it.copy(calendarKeywords = value) }
+    fun onRingtoneChanged(value: String?) = updateEditorState { it.copy(ringtoneUri = value) }
+    fun onSkipOnPublicHolidayChanged(value: Boolean) = updateEditorState { it.copy(skipOnPublicHoliday = value) }
+    fun onGradualVolumeChanged(value: Boolean) = updateEditorState { it.copy(gradualVolume = value) }
+    fun onSnoozeEnabledChanged(enabled: Boolean) = updateEditorState { it.copy(snoozeEnabled = enabled) }
+    fun onSnoozeMinutesChanged(value: Int) = updateEditorState { it.copy(snoozeMinutes = value.coerceIn(5, 30)) }
+    fun toggleDay(day: RepeatDay) = updateEditorState {
         it.copy(repeatDaysMask = it.repeatDaysMask xor day.bit, repeatDaysError = null)
     }
 
@@ -91,13 +97,28 @@ class AlarmEditViewModel @Inject constructor(
             return
         }
         viewModelScope.launch {
-            saver.save(current.toAlarm()).onSuccess { _state.update { state -> state.copy(saved = true) } }
+            saver.save(current.toAlarm()).onSuccess {
+                _state.update { state ->
+                    baseline = state.editableSnapshot()
+                    state.copy(saved = true, hasUnsavedChanges = false)
+                }
+            }
         }
     }
 
     fun delete() = viewModelScope.launch {
         if (_state.value.id != 0L) deleteAlarm.execute(_state.value.id)
-        _state.update { it.copy(saved = true) }
+        _state.update {
+            baseline = it.editableSnapshot()
+            it.copy(saved = true, hasUnsavedChanges = false)
+        }
+    }
+
+    private fun updateEditorState(transform: (AlarmEditState) -> AlarmEditState) {
+        _state.update { current ->
+            val updated = transform(current)
+            updated.copy(hasUnsavedChanges = updated.editableSnapshot() != baseline)
+        }
     }
 
     private fun AlarmEditState.toAlarm() = Alarm(
@@ -117,3 +138,33 @@ class AlarmEditViewModel @Inject constructor(
     )
 
 }
+
+private data class AlarmEditableSnapshot(
+    val name: String,
+    val hour: Int,
+    val minute: Int,
+    val repeatDaysMask: Int,
+    val enabled: Boolean,
+    val skipOnCalendarMatch: Boolean,
+    val calendarKeywords: String,
+    val ringtoneUri: String?,
+    val skipOnPublicHoliday: Boolean,
+    val gradualVolume: Boolean,
+    val snoozeEnabled: Boolean,
+    val snoozeMinutes: Int,
+)
+
+private fun AlarmEditState.editableSnapshot() = AlarmEditableSnapshot(
+    name = name,
+    hour = hour,
+    minute = minute,
+    repeatDaysMask = repeatDaysMask,
+    enabled = enabled,
+    skipOnCalendarMatch = skipOnCalendarMatch,
+    calendarKeywords = calendarKeywords,
+    ringtoneUri = ringtoneUri,
+    skipOnPublicHoliday = skipOnPublicHoliday,
+    gradualVolume = gradualVolume,
+    snoozeEnabled = snoozeEnabled,
+    snoozeMinutes = snoozeMinutes,
+)

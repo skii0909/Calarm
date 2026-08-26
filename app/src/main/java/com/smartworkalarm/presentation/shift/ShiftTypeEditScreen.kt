@@ -36,6 +36,7 @@ import com.smartworkalarm.presentation.alarmedit.readableTextFieldColors
 import com.smartworkalarm.presentation.components.DayToggle
 import com.smartworkalarm.presentation.components.GradientHero
 import com.smartworkalarm.presentation.components.NightPulseSection
+import com.smartworkalarm.presentation.components.UnsavedChangesBackHandler
 
 @Composable
 fun ShiftTypeEditScreen(
@@ -43,10 +44,17 @@ fun ShiftTypeEditScreen(
     groupId: Long,
     shiftTypeId: Long,
     onDone: () -> Unit,
+    onBack: () -> Unit = onDone,
 ) {
     val state by viewModel.shiftTypeState.collectAsState()
     LaunchedEffect(groupId, shiftTypeId) { viewModel.loadShiftType(groupId, shiftTypeId) }
     LaunchedEffect(state.saved, state.deleted) { if (state.saved || state.deleted) onDone() }
+    UnsavedChangesBackHandler(
+        hasUnsavedChanges = state.hasUnsavedChanges,
+        onBack = onBack,
+        onSave = viewModel::saveShiftType,
+        onDiscard = onBack,
+    )
     ShiftTypeEditScreen(
         state = state,
         onNameChanged = viewModel::onShiftTypeNameChanged,
