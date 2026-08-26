@@ -40,6 +40,7 @@ import com.smartworkalarm.presentation.alarmedit.readableTextFieldColors
 import com.smartworkalarm.presentation.components.FeaturePill
 import com.smartworkalarm.presentation.components.GradientHero
 import com.smartworkalarm.presentation.components.NightPulseSection
+import com.smartworkalarm.presentation.components.PersistentSaveScaffold
 import com.smartworkalarm.presentation.components.UnsavedChangesBackHandler
 import com.smartworkalarm.presentation.calendar.calendarConnectionSummary
 import java.time.ZoneId
@@ -94,9 +95,9 @@ fun ShiftGroupScreen(
 ) {
     var showEmergencyMenu by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
-    Column(
-        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 18.dp, vertical = 10.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp),
+    PersistentSaveScaffold(
+        saveLabel = "교대 그룹 저장",
+        onSave = onSave,
     ) {
         Text("교대 알람 그룹", style = MaterialTheme.typography.headlineSmall)
         GradientHero {
@@ -175,13 +176,9 @@ fun ShiftGroupScreen(
             state.shiftTypesError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             state.aliasesError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         }
-        Button(onClick = onSave, modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.extraLarge) {
-            Text("교대 그룹 저장")
-        }
         if (state.id != 0L) {
             OutlinedButton(onClick = { confirmDelete = true }, modifier = Modifier.fillMaxWidth()) { Text("교대 그룹 삭제") }
         }
-        Spacer(Modifier.height(8.dp))
     }
     if (confirmDelete) {
         AlertDialog(

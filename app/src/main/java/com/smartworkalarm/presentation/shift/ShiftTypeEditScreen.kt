@@ -36,6 +36,7 @@ import com.smartworkalarm.presentation.alarmedit.readableTextFieldColors
 import com.smartworkalarm.presentation.components.DayToggle
 import com.smartworkalarm.presentation.components.GradientHero
 import com.smartworkalarm.presentation.components.NightPulseSection
+import com.smartworkalarm.presentation.components.PersistentSaveScaffold
 import com.smartworkalarm.presentation.components.UnsavedChangesBackHandler
 
 @Composable
@@ -89,9 +90,9 @@ fun ShiftTypeEditScreen(
     onDelete: () -> Unit = {},
 ) {
     var confirmDelete by remember { mutableStateOf(false) }
-    Column(
-        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 18.dp, vertical = 10.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp),
+    PersistentSaveScaffold(
+        saveLabel = "근무 형태 저장",
+        onSave = onSave,
     ) {
         Text(if (state.id == 0L) "근무 형태 추가" else "근무 형태 편집", style = MaterialTheme.typography.headlineSmall)
         state.loadError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
@@ -144,11 +145,9 @@ fun ShiftTypeEditScreen(
             SettingSwitch("벨소리 점점 크게", state.gradualVolume, onGradualVolumeChanged)
             SettingSwitch("알람 활성화", state.enabled, onEnabledChanged)
         }
-        Button(onClick = onSave, modifier = Modifier.fillMaxWidth()) { Text("근무 형태 저장") }
         if (state.id != 0L) {
             OutlinedButton(onClick = { confirmDelete = true }, modifier = Modifier.fillMaxWidth()) { Text("근무 형태 삭제") }
         }
-        Spacer(Modifier.height(8.dp))
     }
     if (confirmDelete) {
         AlertDialog(
