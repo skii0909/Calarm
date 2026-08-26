@@ -63,6 +63,16 @@
             android:name=".preview.NextDayPreviewReceiver"
             android:exported="false" />
 
+        <receiver
+            android:name=".prealarm.PreAlarmReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.smartworkalarm.ACTION_PRE_ALARM" />
+                <action android:name="com.smartworkalarm.ACTION_SKIP_OCCURRENCE" />
+                <action android:name="com.smartworkalarm.ACTION_KEEP_OCCURRENCE" />
+            </intent-filter>
+        </receiver>
+
         <service
             android:name=".alarm.AlarmRingingService"
             android:exported="false"
