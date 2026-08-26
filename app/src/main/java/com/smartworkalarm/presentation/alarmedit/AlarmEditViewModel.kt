@@ -96,11 +96,18 @@ class AlarmEditViewModel @Inject constructor(
             _state.update { it.copy(repeatDaysError = "반복 요일을 하나 이상 선택하세요") }
             return
         }
+        val payload = current.toAlarm()
+        val payloadSnapshot = payload.editableSnapshot()
         viewModelScope.launch {
-            saver.save(current.toAlarm()).onSuccess {
+            saver.save(payload).onSuccess { savedId ->
                 _state.update { state ->
-                    baseline = state.editableSnapshot()
-                    state.copy(saved = true, hasUnsavedChanges = false)
+                    baseline = payloadSnapshot
+                    val hasNewChanges = state.editableSnapshot() != payloadSnapshot
+                    state.copy(
+                        id = if (state.id == 0L) savedId else state.id,
+                        saved = !hasNewChanges,
+                        hasUnsavedChanges = hasNewChanges,
+                    )
                 }
             }
         }
@@ -146,7 +153,7 @@ private data class AlarmEditableSnapshot(
     val repeatDaysMask: Int,
     val enabled: Boolean,
     val skipOnCalendarMatch: Boolean,
-    val calendarKeywords: String,
+    val calendarKeywords: List<String>,
     val ringtoneUri: String?,
     val skipOnPublicHoliday: Boolean,
     val gradualVolume: Boolean,
@@ -155,6 +162,21 @@ private data class AlarmEditableSnapshot(
 )
 
 private fun AlarmEditState.editableSnapshot() = AlarmEditableSnapshot(
+    name = name,
+    hour = hour,
+    minute = minute,
+    repeatDaysMask = repeatDaysMask,
+    enabled = enabled,
+    skipOnCalendarMatch = skipOnCalendarMatch,
+    calendarKeywords = CalendarKeywordMatcher.normalize(calendarKeywords),
+    ringtoneUri = ringtoneUri,
+    skipOnPublicHoliday = skipOnPublicHoliday,
+    gradualVolume = gradualVolume,
+    snoozeEnabled = snoozeEnabled,
+    snoozeMinutes = snoozeMinutes,
+)
+
+private fun Alarm.editableSnapshot() = AlarmEditableSnapshot(
     name = name,
     hour = hour,
     minute = minute,

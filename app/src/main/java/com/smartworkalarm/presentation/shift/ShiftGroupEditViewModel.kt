@@ -129,14 +129,22 @@ class ShiftGroupEditViewModel @Inject constructor(
                 _state.update { it.copy(aliasesError = "캘린더 제목 별칭은 그룹 안에서 중복될 수 없습니다") }
             current.emergencyShiftTypeId !in current.shiftTypes.map { it.id } ->
                 _state.update { it.copy(emergencyError = "비상 기본 알람을 선택하세요") }
-            else -> viewModelScope.launch {
-                val savedId = reconcileShiftAlarms.saveGroup(
-                    current.toGroup(name = current.name.trim()).copy(isDraft = false),
-                )
-                _state.update {
-                    val saved = it.copy(id = if (it.id == 0L) savedId else it.id, name = it.name.trim(), isDraft = false)
-                    groupBaseline = saved.editableSnapshot()
-                    saved.copy(saved = true, hasUnsavedChanges = false)
+            else -> {
+                val payload = current.toGroup(name = current.name.trim()).copy(isDraft = false)
+                val payloadSnapshot = payload.editableSnapshot()
+                viewModelScope.launch {
+                    val savedId = reconcileShiftAlarms.saveGroup(payload)
+                    _state.update {
+                        groupBaseline = payloadSnapshot
+                        val hasNewChanges = it.editableSnapshot() != payloadSnapshot
+                        it.copy(
+                            id = if (it.id == 0L) savedId else it.id,
+                            name = if (hasNewChanges) it.name else payload.name,
+                            isDraft = false,
+                            saved = !hasNewChanges,
+                            hasUnsavedChanges = hasNewChanges,
+                        )
+                    }
                 }
             }
         }
@@ -246,12 +254,20 @@ class ShiftGroupEditViewModel @Inject constructor(
                 it.copy(aliasesError = "다른 근무 형태에서 이미 사용하는 제목입니다: $duplicate")
             }
             current.repeatDaysMask == 0 -> _shiftTypeState.update { it.copy(repeatDaysError = "반복 요일을 하나 이상 선택하세요") }
-            else -> viewModelScope.launch {
-                val savedId = reconcileShiftAlarms.saveShiftType(current.toShiftType(aliases))
-                _shiftTypeState.update {
-                    val saved = it.copy(id = if (it.id == 0L) savedId else it.id)
-                    shiftTypeBaseline = saved.editableSnapshot()
-                    saved.copy(saved = true, hasUnsavedChanges = false)
+            else -> {
+                val payload = current.toShiftType(aliases)
+                val payloadSnapshot = payload.editableSnapshot()
+                viewModelScope.launch {
+                    val savedId = reconcileShiftAlarms.saveShiftType(payload)
+                    _shiftTypeState.update {
+                        shiftTypeBaseline = payloadSnapshot
+                        val hasNewChanges = it.editableSnapshot() != payloadSnapshot
+                        it.copy(
+                            id = if (it.id == 0L) savedId else it.id,
+                            saved = !hasNewChanges,
+                            hasUnsavedChanges = hasNewChanges,
+                        )
+                    }
                 }
             }
         }
@@ -356,6 +372,12 @@ private data class ShiftGroupEditableSnapshot(
 )
 
 private fun ShiftGroupEditState.editableSnapshot() = ShiftGroupEditableSnapshot(
+    name = name.trim(),
+    enabled = enabled,
+    emergencyShiftTypeId = emergencyShiftTypeId,
+)
+
+private fun ShiftAlarmGroup.editableSnapshot() = ShiftGroupEditableSnapshot(
     name = name,
     enabled = enabled,
     emergencyShiftTypeId = emergencyShiftTypeId,
@@ -363,7 +385,7 @@ private fun ShiftGroupEditState.editableSnapshot() = ShiftGroupEditableSnapshot(
 
 private data class ShiftTypeEditableSnapshot(
     val name: String,
-    val exactTitles: String,
+    val exactTitles: List<String>,
     val hour: Int,
     val minute: Int,
     val repeatDaysMask: Int,
@@ -376,6 +398,20 @@ private data class ShiftTypeEditableSnapshot(
 )
 
 private fun ShiftTypeEditState.editableSnapshot() = ShiftTypeEditableSnapshot(
+    name = name.trim(),
+    exactTitles = normalizeAliases(exactTitles),
+    hour = hour,
+    minute = minute,
+    repeatDaysMask = repeatDaysMask,
+    enabled = enabled,
+    ringtoneUri = ringtoneUri,
+    gradualVolume = gradualVolume,
+    snoozeEnabled = snoozeEnabled,
+    snoozeMinutes = snoozeMinutes,
+    skipOnPublicHoliday = skipOnPublicHoliday,
+)
+
+private fun ShiftTypeAlarm.editableSnapshot() = ShiftTypeEditableSnapshot(
     name = name,
     exactTitles = exactTitles,
     hour = hour,

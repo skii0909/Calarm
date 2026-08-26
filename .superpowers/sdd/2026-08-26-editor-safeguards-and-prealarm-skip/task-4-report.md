@@ -25,3 +25,19 @@
 ## 우려사항
 
 - Android instrumentation 테스트는 빌드 환경에서 컴파일까지만 검증했으며, 연결된 기기/에뮬레이터 실행은 하지 않았다.
+
+## Fix Round 1 — 비동기 저장 중 추가 입력 보호
+
+- 리뷰 finding: 저장 완료 콜백이 saver/repository에 전달된 payload 대신 최신 UI state를 baseline으로 삼아, 저장 중 입력을 clean 처리하고 자동 이탈할 수 있었다.
+- 수정 파일:
+  - `app/src/main/java/com/smartworkalarm/presentation/alarmedit/AlarmEditViewModel.kt`
+  - `app/src/main/java/com/smartworkalarm/presentation/shift/ShiftGroupEditViewModel.kt`
+  - `app/src/test/java/com/smartworkalarm/presentation/alarmedit/AlarmEditViewModelTest.kt`
+  - `app/src/test/java/com/smartworkalarm/presentation/shift/ShiftGroupEditViewModelTest.kt`
+- 각 저장 시작 시 immutable payload와 영속 필드 snapshot을 캡처한다. 성공 baseline은 해당 payload snapshot으로 갱신하고, 완료 시 최신 UI snapshot이 다르면 최신 입력을 보존한 채 `saved=false`, `hasUnsavedChanges=true`를 유지한다.
+- 새 알람은 저장 중 추가 입력이 있어도 반환된 ID를 state에 반영해 후속 저장이 새 insert로 반복되지 않게 했다.
+- RED 명령: `./gradlew testDebugUnitTest --tests "com.smartworkalarm.presentation.alarmedit.AlarmEditViewModelTest.editing while alarm save is in flight stays dirty and does not exit" --tests "com.smartworkalarm.presentation.shift.ShiftGroupEditViewModelTest.editing group while save is in flight stays dirty and does not exit" --tests "com.smartworkalarm.presentation.shift.ShiftGroupEditViewModelTest.editing shift type while save is in flight stays dirty and does not exit"`
+  - 결과: 3 tests, 3 failed. 세 경로 모두 기존 완료 처리의 `saved=true/clean`에서 실패했다.
+- GREEN/회귀 명령: `./gradlew testDebugUnitTest --tests "com.smartworkalarm.presentation.alarmedit.AlarmEditViewModelTest" --tests "com.smartworkalarm.presentation.shift.ShiftGroupEditViewModelTest" compileDebugAndroidTestKotlin`
+  - 결과: BUILD SUCCESSFUL. focused unit 31개(알람 11, 교대 20) 실패 0, AndroidTest Kotlin 컴파일 성공.
+- `git diff --check` 성공.

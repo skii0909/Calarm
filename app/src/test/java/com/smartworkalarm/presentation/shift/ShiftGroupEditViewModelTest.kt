@@ -21,12 +21,14 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.ZoneOffset
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
@@ -145,6 +147,57 @@ class ShiftGroupEditViewModelTest {
         viewModel.deleteGroup()
         advanceUntilIdle()
         assertFalse(viewModel.state.value.hasUnsavedChanges)
+    }
+
+    @Test
+    fun `editing group while save is in flight stays dirty and does not exit`() = runTest(dispatcher) {
+        val repository = FakeShiftRepository(groupWithTypes())
+        val completion = CompletableDeferred<Unit>()
+        repository.groupSaveCompletion = completion
+        val viewModel = viewModel(repository)
+        viewModel.loadGroup(10)
+        advanceUntilIdle()
+        viewModel.onGroupNameChanged("저장할 그룹")
+        viewModel.onEmergencyShiftTypeChanged(1)
+
+        viewModel.saveGroup()
+        runCurrent()
+        assertEquals("저장할 그룹", repository.savedGroups.single().name)
+
+        viewModel.onGroupNameChanged("저장 중 변경")
+        completion.complete(Unit)
+        advanceUntilIdle()
+
+        assertEquals("저장 중 변경", viewModel.state.value.name)
+        assertFalse(viewModel.state.value.saved)
+        assertTrue(viewModel.state.value.hasUnsavedChanges)
+        viewModel.onGroupNameChanged("저장할 그룹")
+        assertFalse(viewModel.state.value.hasUnsavedChanges)
+    }
+
+    @Test
+    fun `editing shift type while save is in flight stays dirty and does not exit`() = runTest(dispatcher) {
+        val repository = FakeShiftRepository(groupWithTypes())
+        val completion = CompletableDeferred<Unit>()
+        repository.shiftTypeSaveCompletion = completion
+        val viewModel = viewModel(repository)
+        viewModel.loadShiftType(groupId = 10, shiftTypeId = 1)
+        advanceUntilIdle()
+        viewModel.onShiftTypeNameChanged("저장할 근무")
+
+        viewModel.saveShiftType()
+        runCurrent()
+        assertEquals("저장할 근무", repository.savedTypes.single().name)
+
+        viewModel.onShiftTypeNameChanged("저장 중 변경")
+        completion.complete(Unit)
+        advanceUntilIdle()
+
+        assertEquals("저장 중 변경", viewModel.shiftTypeState.value.name)
+        assertFalse(viewModel.shiftTypeState.value.saved)
+        assertTrue(viewModel.shiftTypeState.value.hasUnsavedChanges)
+        viewModel.onShiftTypeNameChanged("저장할 근무")
+        assertFalse(viewModel.shiftTypeState.value.hasUnsavedChanges)
     }
 
     @Test
@@ -414,6 +467,8 @@ class ShiftGroupEditViewModelTest {
         val savedGroups = mutableListOf<ShiftAlarmGroup>()
         val savedTypes = mutableListOf<ShiftTypeAlarm>()
         val deletedGroups = mutableListOf<Long>()
+        var groupSaveCompletion: CompletableDeferred<Unit>? = null
+        var shiftTypeSaveCompletion: CompletableDeferred<Unit>? = null
 
         override fun observeGroupsWithTypes() = groups
         override suspend fun getGroupWithTypes(groupId: Long) = groups.value.firstOrNull { it.group.id == groupId }
@@ -421,10 +476,12 @@ class ShiftGroupEditViewModelTest {
         override suspend fun getEnabledShiftTypes() = groups.value.flatMap { it.shiftTypes }.filter { it.enabled }
         override suspend fun upsertGroup(group: ShiftAlarmGroup): Long {
             savedGroups += group
+            groupSaveCompletion?.await()
             return if (group.id == 0L) 11L else group.id
         }
         override suspend fun upsertShiftType(shiftType: ShiftTypeAlarm): Long {
             savedTypes += shiftType
+            shiftTypeSaveCompletion?.await()
             return if (shiftType.id == 0L) 3L else shiftType.id
         }
         override suspend fun deleteGroup(groupId: Long) { deletedGroups += groupId }

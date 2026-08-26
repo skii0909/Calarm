@@ -7,11 +7,13 @@ import com.smartworkalarm.domain.repository.AlarmScheduler
 import com.smartworkalarm.domain.repository.ScheduleResult
 import com.smartworkalarm.domain.usecase.DeleteAlarmUseCase
 import java.time.Instant
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
@@ -169,6 +171,30 @@ class AlarmEditViewModelTest {
     }
 
     @Test
+    fun `editing while alarm save is in flight stays dirty and does not exit`() = runTest(dispatcher) {
+        val saveCompletion = CompletableDeferred<Unit>()
+        val saver = FakeSaver(saveCompletion)
+        val viewModel = viewModelWith(saver)
+        viewModel.onNameChanged("저장할 이름")
+        viewModel.toggleDay(RepeatDay.MONDAY)
+
+        viewModel.save()
+        runCurrent()
+        assertEquals("저장할 이름", saver.saved.single().name)
+
+        viewModel.onNameChanged("저장 중 변경")
+        saveCompletion.complete(Unit)
+        advanceUntilIdle()
+
+        assertEquals("저장 중 변경", viewModel.state.value.name)
+        assertEquals(1L, viewModel.state.value.id)
+        assertFalse(viewModel.state.value.saved)
+        assertTrue(viewModel.state.value.hasUnsavedChanges)
+        viewModel.onNameChanged("저장할 이름")
+        assertFalse(viewModel.state.value.hasUnsavedChanges)
+    }
+
+    @Test
     fun `disabling snooze preserves selected minutes on save`() = runTest(dispatcher) {
         val saver = FakeSaver()
         val viewModel = viewModelWith(saver)
@@ -208,10 +234,13 @@ class AlarmEditViewModelTest {
         assertEquals(false, saver.saved.single().snoozeEnabled)
     }
 
-    private class FakeSaver : AlarmSaver {
+    private class FakeSaver(
+        private val completion: CompletableDeferred<Unit>? = null,
+    ) : AlarmSaver {
         val saved = mutableListOf<Alarm>()
         override suspend fun save(alarm: Alarm): Result<Long> {
             saved += alarm
+            completion?.await()
             return Result.success(1)
         }
     }
