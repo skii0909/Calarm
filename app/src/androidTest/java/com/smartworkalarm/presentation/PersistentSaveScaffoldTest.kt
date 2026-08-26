@@ -81,4 +81,40 @@ class PersistentSaveScaffoldTest {
             actionBottom <= rootBottom - navigationBarInsetPx,
         )
     }
+
+    @Test
+    fun saveActionUsesTheSafeDrawingInsetWithoutAddingNavigationBarsTwice() {
+        val navigationBarInset = 24.dp
+        val safeDrawingInset = 40.dp
+        var navigationBarInsetPx = 0f
+        var safeDrawingInsetPx = 0f
+
+        compose.setContent {
+            WorkAlarmTheme {
+                navigationBarInsetPx = with(LocalDensity.current) { navigationBarInset.toPx() }
+                safeDrawingInsetPx = with(LocalDensity.current) { safeDrawingInset.toPx() }
+                PersistentSaveScaffold(
+                    saveLabel = "저장",
+                    onSave = {},
+                    scrollState = rememberScrollState(),
+                    bottomBarInsets = WindowInsets(bottom = navigationBarInset),
+                    safeDrawingInsets = WindowInsets(bottom = safeDrawingInset),
+                ) {
+                    Text("설정")
+                }
+            }
+        }
+
+        val rootBottom = compose.onRoot().fetchSemanticsNode().boundsInRoot.bottom
+        val actionBottom = compose.onNodeWithTag("persistent-save-action")
+            .fetchSemanticsNode().boundsInRoot.bottom
+        assertTrue(
+            "save action bottom=$actionBottom must clear safe drawing inset=$safeDrawingInsetPx from root bottom=$rootBottom",
+            actionBottom <= rootBottom - safeDrawingInsetPx,
+        )
+        assertTrue(
+            "save action bottom=$actionBottom must not add navigation inset=$navigationBarInsetPx to safe drawing inset=$safeDrawingInsetPx twice",
+            actionBottom >= rootBottom - safeDrawingInsetPx - navigationBarInsetPx,
+        )
+    }
 }

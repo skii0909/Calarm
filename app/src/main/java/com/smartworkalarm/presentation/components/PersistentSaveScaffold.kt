@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -41,6 +42,7 @@ internal fun PersistentSaveScaffold(
     onSave: () -> Unit,
     scrollState: ScrollState,
     bottomBarInsets: WindowInsets = WindowInsets.navigationBars,
+    safeDrawingInsets: WindowInsets = WindowInsets.safeDrawing,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     Scaffold(
@@ -53,7 +55,7 @@ internal fun PersistentSaveScaffold(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .windowInsetsPadding(bottomBarInsets)
+                        .windowInsetsPadding(bottomBarInsets.union(safeDrawingInsets))
                         .padding(horizontal = 18.dp, vertical = 10.dp),
                 ) {
                     Button(
