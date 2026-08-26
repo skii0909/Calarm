@@ -179,7 +179,7 @@ private fun AlarmIdentityZone(
             shape = CircleShape,
         ) {
             Text(
-                text = if (presentation.isShiftAlarm) "근무 알람" else "WORK ALARM",
+                text = if (presentation.isShiftAlarm) "근무 알람" else "Calarm",
                 color = if (presentation.isShiftAlarm) AlarmMint else AlarmBlue,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.padding(horizontal = 18.dp, vertical = 7.dp),

@@ -2,7 +2,9 @@ package com.smartworkalarm.alarm
 
 import android.app.AlarmManager
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.content.Context
+import android.content.Intent
 import com.smartworkalarm.MainActivity
 import com.smartworkalarm.domain.repository.ScheduleResult
 import com.smartworkalarm.prealarm.AlarmKind
@@ -112,6 +114,55 @@ class AlarmSchedulerImplTest {
         )
         assertTrue(scheduled.single().isAllowWhileIdle)
         assertNull(scheduled.single().alarmClockInfo)
+    }
+
+    @Test
+    fun `rescheduling a regular snooze removes its data-less v1 9 identity before using the URI identity`() {
+        val (scheduler, alarmManager) = scheduler()
+        scheduleLegacyRegular(alarmManager, 41L, snooze = true)
+        val legacyOperation = shadowOf(alarmManager).scheduledAlarms.single().operation
+        assertNull(shadowOf(legacyOperation).savedIntent.data)
+
+        assertEquals(ScheduleResult.Scheduled, scheduler.scheduleSnooze(41L, occurrenceAt))
+
+        val regularSnoozes = shadowOf(alarmManager).scheduledAlarms.filter { scheduled ->
+            shadowOf(scheduled.operation).savedIntent.action == AlarmSchedulerImpl.ACTION_ALARM
+        }
+        assertEquals(1, regularSnoozes.size)
+        assertEquals(
+            "smartworkalarm://scheduled-alarm/regular/41/snooze",
+            shadowOf(regularSnoozes.single().operation).savedIntent.dataString,
+        )
+    }
+
+    @Test
+    fun `regular cancellation removes both data-less v1 9 occurrence and snooze identities`() {
+        val (scheduler, alarmManager) = scheduler()
+        scheduleLegacyRegular(alarmManager, 41L, snooze = false)
+        scheduleLegacyRegular(alarmManager, 41L, snooze = true)
+
+        scheduler.cancel(41L)
+
+        assertTrue(
+            shadowOf(alarmManager).scheduledAlarms.none { scheduled ->
+                shadowOf(scheduled.operation).savedIntent.action == AlarmSchedulerImpl.ACTION_ALARM
+            },
+        )
+    }
+
+    @Test
+    fun `shift cancellation removes both data-less v1 9 occurrence and snooze identities`() {
+        val (scheduler, alarmManager) = scheduler()
+        scheduleLegacyShift(alarmManager, 73L, snooze = false)
+        scheduleLegacyShift(alarmManager, 73L, snooze = true)
+
+        scheduler.cancelShift(73L)
+
+        assertTrue(
+            shadowOf(alarmManager).scheduledAlarms.none { scheduled ->
+                shadowOf(scheduled.operation).savedIntent.action == AlarmSchedulerImpl.ACTION_SHIFT_ALARM
+            },
+        )
     }
 
     @Test
@@ -243,6 +294,38 @@ class AlarmSchedulerImplTest {
             context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         notificationManager.cancelAll()
         return PreAlarmNotificationFactory(context, notificationManager) to notificationManager
+    }
+
+    private fun scheduleLegacyRegular(alarmManager: AlarmManager, alarmId: Long, snooze: Boolean) {
+        alarmManager.setExactAndAllowWhileIdle(
+            AlarmManager.RTC_WAKEUP,
+            occurrenceAt.toEpochMilli(),
+            legacyPendingIntent(
+                action = AlarmSchedulerImpl.ACTION_ALARM,
+                requestCode = alarmId.hashCode() + if (snooze) 1_000_000 else 0,
+            ),
+        )
+    }
+
+    private fun scheduleLegacyShift(alarmManager: AlarmManager, shiftTypeId: Long, snooze: Boolean) {
+        alarmManager.setExactAndAllowWhileIdle(
+            AlarmManager.RTC_WAKEUP,
+            occurrenceAt.toEpochMilli(),
+            legacyPendingIntent(
+                action = AlarmSchedulerImpl.ACTION_SHIFT_ALARM,
+                requestCode = shiftTypeId.hashCode() + if (snooze) 3_000_000 else 2_000_000,
+            ),
+        )
+    }
+
+    private fun legacyPendingIntent(action: String, requestCode: Int): PendingIntent {
+        val context = RuntimeEnvironment.getApplication().applicationContext
+        return PendingIntent.getBroadcast(
+            context,
+            requestCode,
+            Intent(action).setPackage(context.packageName),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
     }
 
     private object NoOpAuditStore : AlarmScheduleAuditStore {

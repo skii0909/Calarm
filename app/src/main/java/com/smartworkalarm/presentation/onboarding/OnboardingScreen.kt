@@ -27,7 +27,11 @@ fun OnboardingScreen(
         modifier = Modifier.fillMaxSize().padding(24.dp),
         verticalArrangement = Arrangement.Center,
     ) {
-        Text("Work Alarm", style = MaterialTheme.typography.displaySmall)
+        Text("Calarm", style = MaterialTheme.typography.displaySmall)
+        Text(
+            "캘람 · 캘린더와 알람의 조합",
+            style = MaterialTheme.typography.titleMedium,
+        )
         Text(
             "휴가를 캘린더에 등록하면 출근 알람을 알아서 건너뜁니다.\n휴가가 끝나면 다시 원래대로 울립니다.",
             modifier = Modifier.padding(vertical = 24.dp),

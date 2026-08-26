@@ -42,8 +42,16 @@ class AlarmSchedulerImpl @Inject constructor(
 
     override fun cancel(alarmId: Long) {
         cancelPostedPreAlarmSafely(AlarmKind.REGULAR, alarmId)
+        alarmManager.cancel(legacyPendingIntent(ACTION_ALARM, alarmId, namespace = 0))
         alarmManager.cancel(pendingIntent(alarmId, snooze = false, Instant.EPOCH))
         recordAuditSafely { auditStore.recordCancelled(regularAuditKey(alarmId, snooze = false)) }
+        alarmManager.cancel(
+            legacyPendingIntent(
+                ACTION_ALARM,
+                alarmId,
+                namespace = SNOOZE_REQUEST_OFFSET,
+            ),
+        )
         alarmManager.cancel(pendingIntent(alarmId, snooze = true, Instant.EPOCH))
         recordAuditSafely { auditStore.recordCancelled(regularAuditKey(alarmId, snooze = true)) }
         alarmManager.cancel(preAlarmPendingIntent(AlarmKind.REGULAR, alarmId, Instant.EPOCH))
@@ -67,14 +75,30 @@ class AlarmSchedulerImpl @Inject constructor(
 
     override fun cancelShift(shiftTypeId: Long) {
         cancelPostedPreAlarmSafely(AlarmKind.SHIFT, shiftTypeId)
+        alarmManager.cancel(
+            legacyPendingIntent(
+                ACTION_SHIFT_ALARM,
+                shiftTypeId,
+                namespace = SHIFT_REQUEST_OFFSET,
+            ),
+        )
         alarmManager.cancel(shiftPendingIntent(shiftTypeId, snooze = false, Instant.EPOCH))
         recordAuditSafely { auditStore.recordCancelled(shiftAuditKey(shiftTypeId, snooze = false)) }
+        alarmManager.cancel(
+            legacyPendingIntent(
+                ACTION_SHIFT_ALARM,
+                shiftTypeId,
+                namespace = SHIFT_SNOOZE_REQUEST_OFFSET,
+            ),
+        )
         alarmManager.cancel(shiftPendingIntent(shiftTypeId, snooze = true, Instant.EPOCH))
         recordAuditSafely { auditStore.recordCancelled(shiftAuditKey(shiftTypeId, snooze = true)) }
         alarmManager.cancel(preAlarmPendingIntent(AlarmKind.SHIFT, shiftTypeId, Instant.EPOCH))
     }
 
     private fun scheduleExact(alarmId: Long, triggerAt: Instant, snooze: Boolean): ScheduleResult {
+        val namespace = if (snooze) SNOOZE_REQUEST_OFFSET else 0
+        alarmManager.cancel(legacyPendingIntent(ACTION_ALARM, alarmId, namespace))
         if (!permission.isGranted()) return ScheduleResult.ExactAlarmPermissionRequired
         val operation = pendingIntent(alarmId, snooze, triggerAt)
         if (snooze) {
@@ -102,6 +126,8 @@ class AlarmSchedulerImpl @Inject constructor(
         snooze: Boolean,
         scheduledOccurrenceAt: Instant,
     ): ScheduleResult {
+        val namespace = if (snooze) SHIFT_SNOOZE_REQUEST_OFFSET else SHIFT_REQUEST_OFFSET
+        alarmManager.cancel(legacyPendingIntent(ACTION_SHIFT_ALARM, shiftTypeId, namespace))
         if (!permission.isGranted()) return ScheduleResult.ExactAlarmPermissionRequired
         val operation = shiftPendingIntent(shiftTypeId, snooze, scheduledOccurrenceAt)
         if (snooze) {
@@ -176,6 +202,20 @@ class AlarmSchedulerImpl @Inject constructor(
         return PendingIntent.getBroadcast(
             context,
             shiftTypeId.hashCode() + namespace,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+    }
+
+    private fun legacyPendingIntent(
+        action: String,
+        id: Long,
+        namespace: Int,
+    ): PendingIntent {
+        val intent = Intent(action).setPackage(context.packageName)
+        return PendingIntent.getBroadcast(
+            context,
+            id.hashCode() + namespace,
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
