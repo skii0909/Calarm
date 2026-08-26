@@ -16,10 +16,14 @@ class WorkAlarmApplication : Application(), Configuration.Provider {
 
     override fun onCreate() {
         super.onCreate()
-        preAlarmNotificationFactory.ensureChannel()
+        initializePreAlarmChannelSafely(preAlarmNotificationFactory::ensureChannel)
         previewScheduler.scheduleNext()
     }
 
     override val workManagerConfiguration: Configuration
         get() = Configuration.Builder().setWorkerFactory(workerFactory).build()
+}
+
+internal inline fun initializePreAlarmChannelSafely(initialize: () -> Unit) {
+    runCatching(initialize)
 }

@@ -11,4 +11,15 @@ class ProjectConfigurationTest {
                 .isAssignableFrom(WorkAlarmApplication::class.java),
         )
     }
+
+    @Test
+    fun `pre-alarm channel creation failure does not abort application initialization`() {
+        val result: Result<Unit> = runCatching {
+            initializePreAlarmChannelSafely {
+                throw SecurityException("Notification channel unavailable")
+            }
+        }
+
+        assertTrue(result.isSuccess)
+    }
 }

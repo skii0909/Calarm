@@ -51,3 +51,14 @@
 ## 우려사항
 
 - PendingIntent request code는 기존 코드와 동일하게 `Long.hashCode()`와 고정 offset을 사용하므로 이론적인 정수 해시 충돌 가능성은 남는다. action/component와 REGULAR/SHIFT 네임스페이스로 일반 충돌은 분리했다.
+
+## Fix round 1: 앱 시작 채널 생성 실패 격리
+
+리뷰에서 `WorkAlarmApplication.onCreate()`의 `ensureChannel()` 예외가 앱 초기화를 중단할 수 있음이 확인됐다. 사전 알림 부수 기능의 실패가 실제 알람 동작에 영향을 주지 않도록 채널 생성 호출을 `initializePreAlarmChannelSafely` 경계에서 `runCatching`으로 격리했다.
+
+- 테스트 파일: `app/src/test/java/com/smartworkalarm/ProjectConfigurationTest.kt`
+- 회귀 테스트: `pre-alarm channel creation failure does not abort application initialization`
+- RED 명령: `.\gradlew.bat testDebugUnitTest --tests "com.smartworkalarm.ProjectConfigurationTest"`
+- RED 결과: `initializePreAlarmChannelSafely` 미구현 참조로 예상한 컴파일 실패를 확인했다.
+- GREEN 명령: `.\gradlew.bat testDebugUnitTest --tests "com.smartworkalarm.ProjectConfigurationTest"`
+- GREEN 결과: `BUILD SUCCESSFUL`; 기존 애플리케이션 클래스 테스트와 새 예외 격리 테스트가 모두 통과했다.
