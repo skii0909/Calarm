@@ -12,6 +12,14 @@ class OnboardingScreenTest {
     @get:Rule val composeRule = createComposeRule()
 
     @Test
+    fun onboardingIdentifiesCalarmAndItsCalendarAlarmDescriptor() {
+        composeRule.setContent { OnboardingScreen(onComplete = {}) }
+
+        composeRule.onNodeWithText("Calarm").assertIsDisplayed()
+        composeRule.onNodeWithText("캘람 · 캘린더와 알람의 조합").assertIsDisplayed()
+    }
+
+    @Test
     fun outlookSelectionExplainsThatItIsNotAvailableInV1() {
         composeRule.setContent { OnboardingScreen(onComplete = {}) }
 

@@ -122,7 +122,7 @@ private fun AlarmListScaffold(
             item {
                 Row(Modifier.fillMaxWidth().padding(top = 10.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Text("WORK ALARM", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.secondary)
+                        Text("Calarm", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.secondary)
                         Text("내 알람", style = MaterialTheme.typography.headlineMedium)
                     }
                     Button(onClick = onSettings, shape = MaterialTheme.shapes.extraLarge) { Text("도움말 · 설정") }

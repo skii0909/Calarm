@@ -16,8 +16,8 @@ android {
         applicationId = "com.smartworkalarm"
         minSdk = 26
         targetSdk = 36
-        versionCode = 12
-        versionName = "1.9"
+        versionCode = 13
+        versionName = "1.10"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -70,6 +70,7 @@ dependencies {
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation(libs.robolectric)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(platform(libs.androidx.compose.bom))

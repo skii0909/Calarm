@@ -7,11 +7,13 @@ import com.smartworkalarm.domain.repository.AlarmScheduler
 import com.smartworkalarm.domain.repository.ScheduleResult
 import com.smartworkalarm.domain.usecase.DeleteAlarmUseCase
 import java.time.Instant
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
@@ -83,6 +85,116 @@ class AlarmEditViewModelTest {
     }
 
     @Test
+    fun `new and freshly loaded alarms are pristine`() = runTest(dispatcher) {
+        val existing = Alarm(
+            id = 7,
+            name = "출근",
+            hour = 7,
+            minute = 0,
+            repeatDaysMask = RepeatDay.MONDAY.bit,
+            enabled = true,
+            skipOnCalendarMatch = true,
+        )
+        val newAlarm = viewModelWith(FakeSaver())
+        val loadedAlarm = viewModelWith(FakeSaver(), existing)
+
+        loadedAlarm.load(existing.id)
+        advanceUntilIdle()
+
+        assertFalse(newAlarm.state.value.hasUnsavedChanges)
+        assertFalse(loadedAlarm.state.value.hasUnsavedChanges)
+    }
+
+    @Test
+    fun `changing and reverting an alarm field updates dirty state from baseline`() = runTest(dispatcher) {
+        val existing = Alarm(
+            id = 7,
+            name = "출근",
+            hour = 7,
+            minute = 0,
+            repeatDaysMask = RepeatDay.MONDAY.bit,
+            enabled = true,
+            skipOnCalendarMatch = true,
+        )
+        val viewModel = viewModelWith(FakeSaver(), existing)
+        viewModel.load(existing.id)
+        advanceUntilIdle()
+
+        viewModel.onNameChanged("조기 출근")
+        assertTrue(viewModel.state.value.hasUnsavedChanges)
+
+        viewModel.onNameChanged("출근")
+        assertFalse(viewModel.state.value.hasUnsavedChanges)
+    }
+
+    @Test
+    fun `alarm validation failure stays unsaved and dirty`() = runTest(dispatcher) {
+        val viewModel = viewModelWith(FakeSaver())
+        viewModel.onNameChanged("출근")
+
+        viewModel.save()
+
+        assertFalse(viewModel.state.value.saved)
+        assertTrue(viewModel.state.value.hasUnsavedChanges)
+    }
+
+    @Test
+    fun `successful alarm save and delete clear dirty state`() = runTest(dispatcher) {
+        val saver = FakeSaver()
+        val viewModel = viewModelWith(saver)
+        viewModel.onNameChanged("출근")
+        viewModel.toggleDay(RepeatDay.MONDAY)
+
+        viewModel.save()
+        advanceUntilIdle()
+
+        assertFalse(viewModel.state.value.hasUnsavedChanges)
+
+        val existing = Alarm(
+            id = 7,
+            name = "출근",
+            hour = 7,
+            minute = 0,
+            repeatDaysMask = RepeatDay.MONDAY.bit,
+            enabled = true,
+            skipOnCalendarMatch = true,
+        )
+        val deletingViewModel = viewModelWith(FakeSaver(), existing)
+        deletingViewModel.load(existing.id)
+        advanceUntilIdle()
+        deletingViewModel.onNameChanged("조기 출근")
+
+        deletingViewModel.delete()
+        advanceUntilIdle()
+
+        assertFalse(deletingViewModel.state.value.hasUnsavedChanges)
+    }
+
+    @Test
+    fun `editing while alarm save is in flight stays dirty and does not exit`() = runTest(dispatcher) {
+        val saveCompletion = CompletableDeferred<Unit>()
+        val saver = FakeSaver(saveCompletion)
+        val viewModel = viewModelWith(saver)
+        viewModel.onNameChanged("저장할 이름")
+        viewModel.toggleDay(RepeatDay.MONDAY)
+
+        viewModel.save()
+        runCurrent()
+        assertEquals("저장할 이름", saver.saved.single().name)
+
+        viewModel.onNameChanged("저장 중 변경")
+        saveCompletion.complete(Unit)
+        advanceUntilIdle()
+
+        assertEquals("저장 중 변경", viewModel.state.value.name)
+        assertEquals(1L, viewModel.state.value.id)
+        assertFalse(viewModel.state.value.saved)
+        assertTrue(viewModel.state.value.hasUnsavedChanges)
+        viewModel.onNameChanged("저장할 이름")
+        assertFalse(viewModel.state.value.hasUnsavedChanges)
+    }
+
+    @Test
     fun `disabling snooze preserves selected minutes on save`() = runTest(dispatcher) {
         val saver = FakeSaver()
         val viewModel = viewModelWith(saver)
@@ -122,10 +234,13 @@ class AlarmEditViewModelTest {
         assertEquals(false, saver.saved.single().snoozeEnabled)
     }
 
-    private class FakeSaver : AlarmSaver {
+    private class FakeSaver(
+        private val completion: CompletableDeferred<Unit>? = null,
+    ) : AlarmSaver {
         val saved = mutableListOf<Alarm>()
         override suspend fun save(alarm: Alarm): Result<Long> {
             saved += alarm
+            completion?.await()
             return Result.success(1)
         }
     }

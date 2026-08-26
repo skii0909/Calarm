@@ -1,17 +1,11 @@
 package com.smartworkalarm.presentation.shift
 
 import androidx.compose.foundation.clickable
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -41,6 +35,8 @@ import com.smartworkalarm.presentation.alarmedit.readableTextFieldColors
 import com.smartworkalarm.presentation.components.FeaturePill
 import com.smartworkalarm.presentation.components.GradientHero
 import com.smartworkalarm.presentation.components.NightPulseSection
+import com.smartworkalarm.presentation.components.PersistentSaveScaffold
+import com.smartworkalarm.presentation.components.UnsavedChangesBackHandler
 import com.smartworkalarm.presentation.calendar.calendarConnectionSummary
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -51,11 +47,20 @@ fun ShiftGroupScreen(
     groupId: Long,
     onDone: () -> Unit,
     onEditShiftType: (groupId: Long, shiftTypeId: Long) -> Unit,
+    onBack: () -> Unit = onDone,
 ) {
     val state by viewModel.state.collectAsState()
     LaunchedEffect(groupId) { viewModel.loadGroup(groupId) }
     LaunchedEffect(state.saved, state.deleted) { if (state.saved || state.deleted) onDone() }
-    BackHandler(enabled = state.isDraft) { viewModel.cancelDraft() }
+    val exitWithoutSaving = {
+        if (state.isDraft || state.isLoading) viewModel.discardGroupChanges() else onBack()
+    }
+    UnsavedChangesBackHandler(
+        hasUnsavedChanges = state.hasUnsavedChanges,
+        onBack = exitWithoutSaving,
+        onSave = viewModel::saveGroup,
+        onDiscard = exitWithoutSaving,
+    )
     ShiftGroupScreen(
         state = state,
         onNameChanged = viewModel::onGroupNameChanged,
@@ -85,9 +90,9 @@ fun ShiftGroupScreen(
 ) {
     var showEmergencyMenu by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
-    Column(
-        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 18.dp, vertical = 10.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp),
+    PersistentSaveScaffold(
+        saveLabel = "교대 그룹 저장",
+        onSave = onSave,
     ) {
         Text("교대 알람 그룹", style = MaterialTheme.typography.headlineSmall)
         GradientHero {
@@ -166,13 +171,9 @@ fun ShiftGroupScreen(
             state.shiftTypesError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             state.aliasesError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         }
-        Button(onClick = onSave, modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.extraLarge) {
-            Text("교대 그룹 저장")
-        }
         if (state.id != 0L) {
             OutlinedButton(onClick = { confirmDelete = true }, modifier = Modifier.fillMaxWidth()) { Text("교대 그룹 삭제") }
         }
-        Spacer(Modifier.height(8.dp))
     }
     if (confirmDelete) {
         AlertDialog(

@@ -9,11 +9,9 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -50,9 +48,16 @@ import com.smartworkalarm.sound.SoundPreviewController
 import com.smartworkalarm.presentation.components.GradientHero
 import com.smartworkalarm.presentation.components.NightPulseSection
 import com.smartworkalarm.presentation.components.DayToggle
+import com.smartworkalarm.presentation.components.PersistentSaveScaffold
+import com.smartworkalarm.presentation.components.UnsavedChangesBackHandler
 
 @Composable
-fun AlarmEditScreen(viewModel: AlarmEditViewModel, alarmId: Long, onDone: () -> Unit) {
+fun AlarmEditScreen(
+    viewModel: AlarmEditViewModel,
+    alarmId: Long,
+    onDone: () -> Unit,
+    onBack: () -> Unit = onDone,
+) {
     val state by viewModel.state.collectAsState()
     val scrollState = rememberScrollState()
     val nameFocusRequester = remember { FocusRequester() }
@@ -64,9 +69,16 @@ fun AlarmEditScreen(viewModel: AlarmEditViewModel, alarmId: Long, onDone: () -> 
             nameFocusRequester.requestFocus()
         }
     }
-    Column(
-        modifier = Modifier.fillMaxSize().verticalScroll(scrollState).padding(horizontal = 18.dp, vertical = 10.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp),
+    UnsavedChangesBackHandler(
+        hasUnsavedChanges = state.hasUnsavedChanges,
+        onBack = onBack,
+        onSave = viewModel::save,
+        onDiscard = onBack,
+    )
+    PersistentSaveScaffold(
+        saveLabel = "알람 저장",
+        onSave = viewModel::save,
+        scrollState = scrollState,
     ) {
         Text(if (alarmId == 0L) "새 알람" else "알람 편집", style = MaterialTheme.typography.headlineSmall)
         GradientHero {
@@ -119,9 +131,7 @@ fun AlarmEditScreen(viewModel: AlarmEditViewModel, alarmId: Long, onDone: () -> 
             Text("알람 소리가 1분 동안 서서히 커집니다.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             SettingSwitch("알람 활성화", state.enabled, viewModel::onEnabledChanged)
         }
-        Button(onClick = viewModel::save, modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.extraLarge) { Text("알람 저장") }
         if (alarmId != 0L) OutlinedButton(onClick = { viewModel.delete() }, modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.extraLarge) { Text("알람 삭제") }
-        androidx.compose.foundation.layout.Spacer(Modifier.padding(bottom = 8.dp))
     }
 }
 

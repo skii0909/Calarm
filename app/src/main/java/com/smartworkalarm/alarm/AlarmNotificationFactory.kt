@@ -61,7 +61,7 @@ class AlarmNotificationFactory @Inject constructor(
 
     private fun ensureChannel() {
         val channel = NotificationChannel(RingingChannelPolicy.ID, "알람", NotificationManager.IMPORTANCE_HIGH).apply {
-            description = "Work Alarm 실행 알림"
+            description = "캘람 · 캘린더와 알람의 조합 실행 알림"
         }
         applyRingingChannelPolicy(
             disableSound = { channel.setSound(null, null) },

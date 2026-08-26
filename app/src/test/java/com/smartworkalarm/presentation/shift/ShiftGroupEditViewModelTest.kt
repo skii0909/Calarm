@@ -21,12 +21,14 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.ZoneOffset
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
@@ -59,6 +61,143 @@ class ShiftGroupEditViewModelTest {
         viewModel.onGroupNameChanged("병원 근무")
         viewModel.saveGroup()
         assertEquals("근무 형태를 2개 이상 추가하세요", viewModel.state.value.shiftTypesError)
+    }
+
+    @Test
+    fun `new and freshly loaded group and shift type states are pristine`() = runTest(dispatcher) {
+        val repository = FakeShiftRepository(groupWithTypes())
+        val newEditor = viewModel(repository)
+        assertFalse(newEditor.state.value.hasUnsavedChanges)
+        assertFalse(newEditor.shiftTypeState.value.hasUnsavedChanges)
+
+        newEditor.loadGroup(10)
+        newEditor.loadShiftType(groupId = 10, shiftTypeId = 1)
+        advanceUntilIdle()
+
+        assertFalse(newEditor.state.value.hasUnsavedChanges)
+        assertFalse(newEditor.shiftTypeState.value.hasUnsavedChanges)
+    }
+
+    @Test
+    fun `changing and reverting group and shift type fields updates dirty state from baselines`() = runTest(dispatcher) {
+        val repository = FakeShiftRepository(groupWithTypes())
+        val viewModel = viewModel(repository)
+        viewModel.loadGroup(10)
+        viewModel.loadShiftType(groupId = 10, shiftTypeId = 1)
+        advanceUntilIdle()
+
+        viewModel.onGroupNameChanged("야간 근무")
+        assertTrue(viewModel.state.value.hasUnsavedChanges)
+        viewModel.onGroupNameChanged("병원 근무")
+        assertFalse(viewModel.state.value.hasUnsavedChanges)
+
+        viewModel.onShiftTypeNameChanged("이른 주간")
+        assertTrue(viewModel.shiftTypeState.value.hasUnsavedChanges)
+        viewModel.onShiftTypeNameChanged("주간")
+        assertFalse(viewModel.shiftTypeState.value.hasUnsavedChanges)
+    }
+
+    @Test
+    fun `group and shift type validation failures stay unsaved and dirty`() = runTest(dispatcher) {
+        val repository = FakeShiftRepository(groupWithTypes())
+        val viewModel = viewModel(repository)
+        viewModel.loadGroup(10)
+        viewModel.loadShiftType(groupId = 10, shiftTypeId = 1)
+        advanceUntilIdle()
+
+        viewModel.onGroupNameChanged("   ")
+        viewModel.saveGroup()
+        assertFalse(viewModel.state.value.saved)
+        assertTrue(viewModel.state.value.hasUnsavedChanges)
+
+        viewModel.onShiftTypeNameChanged("   ")
+        viewModel.saveShiftType()
+        assertFalse(viewModel.shiftTypeState.value.saved)
+        assertTrue(viewModel.shiftTypeState.value.hasUnsavedChanges)
+    }
+
+    @Test
+    fun `successful group and shift type saves and deletes clear dirty state`() = runTest(dispatcher) {
+        val repository = FakeShiftRepository(groupWithTypes())
+        val viewModel = viewModel(repository)
+        viewModel.loadGroup(10)
+        advanceUntilIdle()
+        viewModel.onGroupNameChanged("수술실 근무")
+        viewModel.onEmergencyShiftTypeChanged(1)
+
+        viewModel.saveGroup()
+        advanceUntilIdle()
+        assertFalse(viewModel.state.value.hasUnsavedChanges)
+
+        viewModel.loadShiftType(groupId = 10, shiftTypeId = 1)
+        advanceUntilIdle()
+        viewModel.onShiftTypeNameChanged("이른 주간")
+        viewModel.saveShiftType()
+        advanceUntilIdle()
+        assertFalse(viewModel.shiftTypeState.value.hasUnsavedChanges)
+
+        viewModel.onShiftTypeNameChanged("삭제할 주간")
+        viewModel.deleteShiftType()
+        advanceUntilIdle()
+        assertFalse(viewModel.shiftTypeState.value.hasUnsavedChanges)
+
+        viewModel.loadGroup(10)
+        advanceUntilIdle()
+        viewModel.onGroupNameChanged("삭제할 그룹")
+        viewModel.deleteGroup()
+        advanceUntilIdle()
+        assertFalse(viewModel.state.value.hasUnsavedChanges)
+    }
+
+    @Test
+    fun `editing group while save is in flight stays dirty and does not exit`() = runTest(dispatcher) {
+        val repository = FakeShiftRepository(groupWithTypes())
+        val completion = CompletableDeferred<Unit>()
+        repository.groupSaveCompletion = completion
+        val viewModel = viewModel(repository)
+        viewModel.loadGroup(10)
+        advanceUntilIdle()
+        viewModel.onGroupNameChanged("저장할 그룹")
+        viewModel.onEmergencyShiftTypeChanged(1)
+
+        viewModel.saveGroup()
+        runCurrent()
+        assertEquals("저장할 그룹", repository.savedGroups.single().name)
+
+        viewModel.onGroupNameChanged("저장 중 변경")
+        completion.complete(Unit)
+        advanceUntilIdle()
+
+        assertEquals("저장 중 변경", viewModel.state.value.name)
+        assertFalse(viewModel.state.value.saved)
+        assertTrue(viewModel.state.value.hasUnsavedChanges)
+        viewModel.onGroupNameChanged("저장할 그룹")
+        assertFalse(viewModel.state.value.hasUnsavedChanges)
+    }
+
+    @Test
+    fun `editing shift type while save is in flight stays dirty and does not exit`() = runTest(dispatcher) {
+        val repository = FakeShiftRepository(groupWithTypes())
+        val completion = CompletableDeferred<Unit>()
+        repository.shiftTypeSaveCompletion = completion
+        val viewModel = viewModel(repository)
+        viewModel.loadShiftType(groupId = 10, shiftTypeId = 1)
+        advanceUntilIdle()
+        viewModel.onShiftTypeNameChanged("저장할 근무")
+
+        viewModel.saveShiftType()
+        runCurrent()
+        assertEquals("저장할 근무", repository.savedTypes.single().name)
+
+        viewModel.onShiftTypeNameChanged("저장 중 변경")
+        completion.complete(Unit)
+        advanceUntilIdle()
+
+        assertEquals("저장 중 변경", viewModel.shiftTypeState.value.name)
+        assertFalse(viewModel.shiftTypeState.value.saved)
+        assertTrue(viewModel.shiftTypeState.value.hasUnsavedChanges)
+        viewModel.onShiftTypeNameChanged("저장할 근무")
+        assertFalse(viewModel.shiftTypeState.value.hasUnsavedChanges)
     }
 
     @Test
@@ -129,18 +268,62 @@ class ShiftGroupEditViewModelTest {
     }
 
     @Test
-    fun `cancelling a persisted draft deletes the abandoned group`() = runTest(dispatcher) {
+    fun `discarding changes deletes an abandoned persisted draft`() = runTest(dispatcher) {
         val repository = FakeShiftRepository(groupWithTypes())
         val viewModel = viewModel(repository)
         viewModel.onGroupNameChanged("병원 근무")
         viewModel.createDraftAndAddShiftType {}
         advanceUntilIdle()
 
-        viewModel.cancelDraft()
+        viewModel.discardGroupChanges()
         advanceUntilIdle()
 
         assertEquals(listOf(11L), repository.deletedGroups)
     }
+
+    @Test
+    fun `reloaded persisted draft remains dirty and discard cleans it up`() = runTest(dispatcher) {
+        val persistedDraft = groupWithTypes().let { aggregate ->
+            aggregate.copy(group = aggregate.group.copy(id = 11L, isDraft = true))
+        }
+        val repository = FakeShiftRepository(persistedDraft)
+        val viewModel = viewModel(repository)
+
+        viewModel.loadGroup(11L)
+        advanceUntilIdle()
+
+        assertTrue(viewModel.state.value.isDraft)
+        assertTrue(viewModel.state.value.hasUnsavedChanges)
+
+        viewModel.discardGroupChanges()
+        advanceUntilIdle()
+
+        assertEquals(listOf(11L), repository.deletedGroups)
+    }
+
+    @Test
+    fun `draft reload is guarded immediately and early discard still cleans persisted draft`() =
+        runTest(dispatcher) {
+            val persistedDraft = groupWithTypes().let { aggregate ->
+                aggregate.copy(group = aggregate.group.copy(id = 11L, isDraft = true))
+            }
+            val repository = FakeShiftRepository(persistedDraft)
+            val loadCompletion = CompletableDeferred<Unit>()
+            repository.groupLoadCompletion = loadCompletion
+            val viewModel = viewModel(repository)
+
+            viewModel.loadGroup(11L)
+            runCurrent()
+
+            assertTrue(viewModel.state.value.hasUnsavedChanges)
+
+            viewModel.discardGroupChanges()
+            runCurrent()
+            loadCompletion.complete(Unit)
+            advanceUntilIdle()
+
+            assertEquals(listOf(11L), repository.deletedGroups)
+        }
 
     @Test
     fun `repeated draft taps create one group and navigate once`() = runTest(dispatcher) {
@@ -328,17 +511,25 @@ class ShiftGroupEditViewModelTest {
         val savedGroups = mutableListOf<ShiftAlarmGroup>()
         val savedTypes = mutableListOf<ShiftTypeAlarm>()
         val deletedGroups = mutableListOf<Long>()
+        var groupLoadCompletion: CompletableDeferred<Unit>? = null
+        var groupSaveCompletion: CompletableDeferred<Unit>? = null
+        var shiftTypeSaveCompletion: CompletableDeferred<Unit>? = null
 
         override fun observeGroupsWithTypes() = groups
-        override suspend fun getGroupWithTypes(groupId: Long) = groups.value.firstOrNull { it.group.id == groupId }
+        override suspend fun getGroupWithTypes(groupId: Long): ShiftAlarmRepository.GroupWithTypes? {
+            groupLoadCompletion?.await()
+            return groups.value.firstOrNull { it.group.id == groupId }
+        }
         override suspend fun getShiftType(id: Long) = groups.value.flatMap { it.shiftTypes }.firstOrNull { it.id == id }
         override suspend fun getEnabledShiftTypes() = groups.value.flatMap { it.shiftTypes }.filter { it.enabled }
         override suspend fun upsertGroup(group: ShiftAlarmGroup): Long {
             savedGroups += group
+            groupSaveCompletion?.await()
             return if (group.id == 0L) 11L else group.id
         }
         override suspend fun upsertShiftType(shiftType: ShiftTypeAlarm): Long {
             savedTypes += shiftType
+            shiftTypeSaveCompletion?.await()
             return if (shiftType.id == 0L) 3L else shiftType.id
         }
         override suspend fun deleteGroup(groupId: Long) { deletedGroups += groupId }
