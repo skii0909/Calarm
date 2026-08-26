@@ -6,6 +6,9 @@ import com.smartworkalarm.domain.repository.AlarmRepository
 import com.smartworkalarm.domain.repository.AlarmScheduler
 import com.smartworkalarm.domain.repository.ScheduleResult
 import com.smartworkalarm.domain.usecase.CalculateNextOccurrenceUseCase
+import com.smartworkalarm.prealarm.AlarmKind
+import com.smartworkalarm.prealarm.AlarmOccurrenceKey
+import com.smartworkalarm.prealarm.OccurrenceSkipStore
 import java.time.Instant
 import java.time.ZoneId
 import kotlinx.coroutines.flow.Flow
@@ -90,6 +93,46 @@ class AlarmExecutionCoordinatorTest {
     }
 
     @Test
+    fun `marked regular occurrence is consumed after scheduling its repeat and the following occurrence rings`() = runTest {
+        val events = mutableListOf<String>()
+        val skips = SkipStore()
+        val scheduledOccurrence = now.minusSeconds(37L)
+        val followingOccurrence = scheduledOccurrence.plusSeconds(24 * 60 * 60L)
+        val key = AlarmOccurrenceKey(AlarmKind.REGULAR, 7, scheduledOccurrence)
+        skips.mark(key)
+        val coordinator = coordinator(
+            skipStore = skips,
+            onSchedule = { events += "schedule" },
+            onDecision = { events += "evaluate" },
+            onRing = { _, _ -> events += "ring" },
+        )
+
+        assertEquals(
+            ExecutionOutcome.SkippedByUser,
+            coordinator.execute(7, false, now, scheduledOccurrence),
+        )
+        assertEquals(listOf("schedule"), events)
+        assertFalse(skips.consume(key))
+        assertEquals(
+            ExecutionOutcome.Ringing,
+            coordinator.execute(7, false, now.plusSeconds(60L), followingOccurrence),
+        )
+        assertEquals(listOf("schedule", "schedule", "evaluate", "ring"), events)
+    }
+
+    @Test
+    fun `snooze delivery does not consume a marked regular occurrence`() = runTest {
+        val skips = SkipStore()
+        val scheduledOccurrence = now.minusSeconds(37L)
+        val key = AlarmOccurrenceKey(AlarmKind.REGULAR, 7, scheduledOccurrence)
+        skips.mark(key)
+        val coordinator = coordinator(skipStore = skips)
+
+        assertEquals(ExecutionOutcome.Ringing, coordinator.execute(7, true, now, scheduledOccurrence))
+        assertEquals(ExecutionOutcome.SkippedByUser, coordinator.execute(7, false, now, scheduledOccurrence))
+    }
+
+    @Test
     fun `missing alarm is ignored`() = runTest {
         val coordinator = coordinator(alarm = null)
 
@@ -100,13 +143,18 @@ class AlarmExecutionCoordinatorTest {
         alarm: Alarm? = Alarm(7, "출근", 7, 0, 31, true, true),
         decision: AlarmExecutionDecision = AlarmExecutionDecision.RING,
         onSchedule: () -> Unit = {},
+        onDecision: () -> Unit = {},
         onRing: (String?, Boolean) -> Unit = { _, _ -> },
         onRingAt: (Instant) -> Unit = {},
+        skipStore: OccurrenceSkipStore = SkipStore(),
     ) = AlarmExecutionCoordinator(
         repository = Repository(alarm),
         scheduler = Scheduler(onSchedule),
         calculator = CalculateNextOccurrenceUseCase(),
-        decisionProvider = { _, _, _ -> decision },
+        decisionProvider = { _, _, _ ->
+            onDecision()
+            decision
+        },
         ringer = object : AlarmRinger {
             override fun start(
                 alarmId: Long,
@@ -131,6 +179,7 @@ class AlarmExecutionCoordinatorTest {
             }
         },
         zoneId = zone,
+        skipStore = skipStore,
     )
 
     private class Repository(private val alarm: Alarm?) : AlarmRepository {
@@ -149,5 +198,17 @@ class AlarmExecutionCoordinatorTest {
         }
         override fun cancel(alarmId: Long) = Unit
         override fun scheduleSnooze(alarmId: Long, triggerAt: Instant) = ScheduleResult.Scheduled
+    }
+
+    private class SkipStore : OccurrenceSkipStore {
+        private val keys = mutableSetOf<AlarmOccurrenceKey>()
+
+        override fun mark(key: AlarmOccurrenceKey) {
+            keys += key
+        }
+
+        override fun consume(key: AlarmOccurrenceKey): Boolean = keys.remove(key)
+
+        override fun prune(now: Instant) = Unit
     }
 }
