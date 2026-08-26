@@ -136,6 +136,42 @@ class AlarmSchedulerImplTest {
     }
 
     @Test
+    fun `package replacement regular rescheduling removes its data-less v1 9 occurrence before scheduling v1 10`() {
+        val (scheduler, alarmManager) = scheduler()
+        scheduleLegacyRegular(alarmManager, 41L, snooze = false)
+
+        assertEquals(ScheduleResult.Scheduled, scheduler.schedule(41L, occurrenceAt))
+
+        val regularOccurrences = shadowOf(alarmManager).scheduledAlarms.filter { scheduled ->
+            shadowOf(scheduled.operation).savedIntent.action == AlarmSchedulerImpl.ACTION_ALARM
+        }
+        assertEquals(1, regularOccurrences.size)
+        assertEquals(
+            "smartworkalarm://scheduled-alarm/regular/41/occurrence",
+            shadowOf(regularOccurrences.single().operation).savedIntent.dataString,
+        )
+        assertNotNull(regularOccurrences.single().alarmClockInfo)
+    }
+
+    @Test
+    fun `package replacement shift rescheduling removes its data-less v1 9 occurrence before scheduling v1 10`() {
+        val (scheduler, alarmManager) = scheduler()
+        scheduleLegacyShift(alarmManager, 73L, snooze = false)
+
+        assertEquals(ScheduleResult.Scheduled, scheduler.scheduleShift(73L, occurrenceAt))
+
+        val shiftOccurrences = shadowOf(alarmManager).scheduledAlarms.filter { scheduled ->
+            shadowOf(scheduled.operation).savedIntent.action == AlarmSchedulerImpl.ACTION_SHIFT_ALARM
+        }
+        assertEquals(1, shiftOccurrences.size)
+        assertEquals(
+            "smartworkalarm://scheduled-alarm/shift/73/occurrence",
+            shadowOf(shiftOccurrences.single().operation).savedIntent.dataString,
+        )
+        assertNotNull(shiftOccurrences.single().alarmClockInfo)
+    }
+
+    @Test
     fun `regular cancellation removes both data-less v1 9 occurrence and snooze identities`() {
         val (scheduler, alarmManager) = scheduler()
         scheduleLegacyRegular(alarmManager, 41L, snooze = false)

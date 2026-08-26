@@ -35,6 +35,19 @@
 
 Result: `BUILD SUCCESSFUL` (focused unit tests pass; Android instrumentation-test Kotlin sources compile).
 
+## Review follow-up: package-replacement non-snooze coverage
+
+- Added focused scheduler tests for the regular `schedule()` and shift `scheduleShift()` non-snooze paths used by package-replacement rescheduling.
+- Each test first schedules the exact v1.9 package-scoped, data-less occurrence identity, then asserts rescheduling leaves exactly one action-matching v1.10 URI-backed occurrence with `AlarmClockInfo`.
+- Mutation RED: temporarily removing the two schedule-path legacy cancellation calls produced three focused failures: the new regular and shift occurrence tests plus the existing regular snooze test. This proves the tests detect an old reservation remaining beside the new identity.
+- GREEN command:
+
+  ```powershell
+  .\gradlew.bat :app:testDebugUnitTest --tests com.smartworkalarm.alarm.AlarmSchedulerImplTest :app:compileDebugAndroidTestKotlin
+  ```
+
+  Result: `BUILD SUCCESSFUL`.
+
 ## Self-review
 
 - Checked the migration builder is implicit, package-scoped, has no data URI, and uses the required regular/shift request-code offsets.
