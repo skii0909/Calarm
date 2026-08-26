@@ -30,7 +30,10 @@ class ReconcileShiftAlarmsUseCaseTest {
 
         assertEquals(3L, id)
         assertEquals(emptyList<Long>(), scheduler.cancelled)
-        assertEquals(listOf(3L), scheduler.scheduled.map { it.first })
+        assertEquals(
+            listOf(3L to Instant.parse("2026-08-24T00:00:00Z")),
+            scheduler.scheduled,
+        )
     }
 
     @Test

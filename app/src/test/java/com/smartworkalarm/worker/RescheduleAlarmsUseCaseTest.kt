@@ -35,7 +35,10 @@ class RescheduleAlarmsUseCaseTest {
 
         useCase.execute(Instant.parse("2026-08-19T20:00:00Z"))
 
-        assertEquals(listOf(1L), scheduler.ids)
+        assertEquals(
+            listOf(1L to Instant.parse("2026-08-19T22:00:00Z")),
+            scheduler.scheduled,
+        )
     }
 
     @Test
@@ -53,7 +56,10 @@ class RescheduleAlarmsUseCaseTest {
 
         useCase.execute(Instant.parse("2026-08-19T20:00:00Z"))
 
-        assertEquals(listOf(8L), scheduler.ids)
+        assertEquals(
+            listOf(8L to Instant.parse("2026-08-20T10:00:00Z")),
+            scheduler.scheduled,
+        )
     }
 
     private class Repository(private val alarms: List<Alarm>) : AlarmRepository {
@@ -66,9 +72,9 @@ class RescheduleAlarmsUseCaseTest {
     }
 
     private class Scheduler : AlarmScheduler {
-        val ids = mutableListOf<Long>()
+        val scheduled = mutableListOf<Pair<Long, Instant>>()
         override fun schedule(alarmId: Long, triggerAt: Instant): ScheduleResult {
-            ids += alarmId
+            scheduled += alarmId to triggerAt
             return ScheduleResult.Scheduled
         }
         override fun cancel(alarmId: Long) = Unit
@@ -87,9 +93,9 @@ class RescheduleAlarmsUseCaseTest {
     }
 
     private class ShiftScheduler : ShiftAlarmScheduler {
-        val ids = mutableListOf<Long>()
+        val scheduled = mutableListOf<Pair<Long, Instant>>()
         override fun scheduleShift(shiftTypeId: Long, triggerAt: Instant): ScheduleResult {
-            ids += shiftTypeId
+            scheduled += shiftTypeId to triggerAt
             return ScheduleResult.Scheduled
         }
         override fun scheduleShiftSnooze(

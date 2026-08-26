@@ -28,7 +28,10 @@ class AlarmCrudUseCasesTest {
         val result = useCase.execute(alarm(id = 0))
 
         assertEquals(42L, result.getOrThrow())
-        assertEquals(42L, scheduler.scheduled.single().first)
+        assertEquals(
+            listOf(42L to Instant.parse("2026-08-19T22:00:00Z")),
+            scheduler.scheduled,
+        )
     }
 
     @Test
@@ -51,6 +54,21 @@ class AlarmCrudUseCasesTest {
 
         assertEquals(false, repository.existing?.enabled)
         assertEquals(listOf(1L), scheduler.cancelled)
+    }
+
+    @Test
+    fun `enabling alarm schedules exactly one next occurrence`() = runTest {
+        val repository = FakeRepository(existing = alarm().copy(enabled = false))
+        val scheduler = FakeScheduler()
+
+        SetAlarmEnabledUseCase(repository, scheduler, CalculateNextOccurrenceUseCase(), clock, zone)
+            .execute(1, true)
+
+        assertEquals(true, repository.existing?.enabled)
+        assertEquals(
+            listOf(1L to Instant.parse("2026-08-19T22:00:00Z")),
+            scheduler.scheduled,
+        )
     }
 
     @Test
