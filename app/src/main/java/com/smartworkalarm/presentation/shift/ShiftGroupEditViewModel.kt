@@ -38,6 +38,7 @@ data class ShiftGroupEditState(
     val shiftTypesError: String? = null,
     val aliasesError: String? = null,
     val emergencyError: String? = null,
+    val isLoading: Boolean = false,
     val saved: Boolean = false,
     val deleted: Boolean = false,
     val hasUnsavedChanges: Boolean = false,
@@ -92,8 +93,17 @@ class ShiftGroupEditViewModel @Inject constructor(
             _state.value = fresh
             return
         }
+        _state.value = ShiftGroupEditState(
+            id = groupId,
+            isLoading = true,
+            hasUnsavedChanges = true,
+        )
         viewModelScope.launch {
-            val aggregate = repository.getGroupWithTypes(groupId) ?: return@launch
+            val aggregate = repository.getGroupWithTypes(groupId)
+            if (aggregate == null) {
+                _state.update { it.copy(isLoading = false, hasUnsavedChanges = false) }
+                return@launch
+            }
             val calendarState = evaluateCalendar(aggregate)
             val loaded = ShiftGroupEditState(
                 id = aggregate.group.id,
@@ -107,8 +117,9 @@ class ShiftGroupEditViewModel @Inject constructor(
                 calendarConnection = connectionRepository.getState(),
                 lastCalendarQuery = calendarState.queryStatus,
             )
+            if (_state.value.deleted) return@launch
             groupBaseline = loaded.editableSnapshot()
-            _state.value = loaded
+            _state.value = loaded.copy(hasUnsavedChanges = loaded.isDraft)
         }
     }
 
@@ -186,10 +197,17 @@ class ShiftGroupEditViewModel @Inject constructor(
 
     fun cancelDraft() = viewModelScope.launch {
         val current = _state.value
-        if (current.id != 0L && current.isDraft) reconcileShiftAlarms.deleteGroup(current.id)
+        val persistedDraft = if (current.id != 0L && !current.isDraft) {
+            repository.getGroupWithTypes(current.id)?.group?.isDraft == true
+        } else {
+            false
+        }
+        if (current.id != 0L && (current.isDraft || persistedDraft)) {
+            reconcileShiftAlarms.deleteGroup(current.id)
+        }
         _state.update {
             groupBaseline = it.editableSnapshot()
-            it.copy(deleted = true, hasUnsavedChanges = false)
+            it.copy(isLoading = false, deleted = true, hasUnsavedChanges = false)
         }
     }
 
@@ -205,7 +223,7 @@ class ShiftGroupEditViewModel @Inject constructor(
                 shiftTypes = aggregate.shiftTypes,
             )
             groupBaseline = loadedGroup.editableSnapshot()
-            _state.value = loadedGroup
+            _state.value = loadedGroup.copy(hasUnsavedChanges = loadedGroup.isDraft)
             if (shiftTypeId == 0L) {
                 val freshType = ShiftTypeEditState(groupId = groupId)
                 shiftTypeBaseline = freshType.editableSnapshot()
@@ -285,7 +303,9 @@ class ShiftGroupEditViewModel @Inject constructor(
     private fun updateGroupState(transform: (ShiftGroupEditState) -> ShiftGroupEditState) {
         _state.update { current ->
             val updated = transform(current)
-            updated.copy(hasUnsavedChanges = updated.editableSnapshot() != groupBaseline)
+            updated.copy(
+                hasUnsavedChanges = updated.isDraft || updated.editableSnapshot() != groupBaseline,
+            )
         }
     }
 

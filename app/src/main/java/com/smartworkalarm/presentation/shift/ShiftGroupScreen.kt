@@ -53,7 +53,7 @@ fun ShiftGroupScreen(
     LaunchedEffect(groupId) { viewModel.loadGroup(groupId) }
     LaunchedEffect(state.saved, state.deleted) { if (state.saved || state.deleted) onDone() }
     val exitWithoutSaving = {
-        if (state.isDraft) viewModel.discardGroupChanges() else onBack()
+        if (state.isDraft || state.isLoading) viewModel.discardGroupChanges() else onBack()
     }
     UnsavedChangesBackHandler(
         hasUnsavedChanges = state.hasUnsavedChanges,

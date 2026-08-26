@@ -11,6 +11,8 @@ import com.smartworkalarm.permissions.AndroidAlarmDiagnosticsSource
 import com.smartworkalarm.alarm.SharedPreferencesAlarmScheduleAuditStore
 import com.smartworkalarm.domain.usecase.SaveAlarmUseCase
 import com.smartworkalarm.prealarm.OccurrenceSkipStore
+import com.smartworkalarm.prealarm.PreAlarmNotificationCanceller
+import com.smartworkalarm.prealarm.PreAlarmNotificationFactory
 import com.smartworkalarm.prealarm.SharedPreferencesOccurrenceSkipStore
 import com.smartworkalarm.presentation.alarmedit.AlarmSaver
 import com.smartworkalarm.domain.repository.AlarmScheduler
@@ -43,6 +45,11 @@ abstract class AlarmBindings {
 
     @Binds
     abstract fun bindAlarmDiagnosticsSource(implementation: AndroidAlarmDiagnosticsSource): AlarmDiagnosticsSource
+
+    @Binds
+    abstract fun bindPreAlarmNotificationCanceller(
+        implementation: PreAlarmNotificationFactory,
+    ): PreAlarmNotificationCanceller
 }
 
 @Module
@@ -50,9 +57,13 @@ abstract class AlarmBindings {
 object AlarmModule {
     @Provides
     @Singleton
-    fun provideOccurrenceSkipStore(@ApplicationContext context: Context): OccurrenceSkipStore =
+    fun provideOccurrenceSkipStore(
+        @ApplicationContext context: Context,
+        clock: Clock,
+    ): OccurrenceSkipStore =
         SharedPreferencesOccurrenceSkipStore(
             preferences = context.getSharedPreferences("occurrence_skip_store", Context.MODE_PRIVATE),
+            clock = clock,
         )
 
     @Provides

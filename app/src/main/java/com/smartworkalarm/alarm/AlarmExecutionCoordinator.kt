@@ -9,6 +9,7 @@ import com.smartworkalarm.domain.usecase.ShouldRingAlarmUseCase
 import com.smartworkalarm.prealarm.AlarmKind
 import com.smartworkalarm.prealarm.AlarmOccurrenceKey
 import com.smartworkalarm.prealarm.OccurrenceSkipStore
+import com.smartworkalarm.prealarm.PreAlarmNotificationCanceller
 import java.time.Instant
 import java.time.ZoneId
 import javax.inject.Inject
@@ -30,6 +31,7 @@ class AlarmExecutionCoordinator internal constructor(
     private val ringer: AlarmRinger,
     private val zoneId: ZoneId,
     private val skipStore: OccurrenceSkipStore,
+    private val preAlarmNotifications: PreAlarmNotificationCanceller,
 ) {
     @Inject
     constructor(
@@ -40,6 +42,7 @@ class AlarmExecutionCoordinator internal constructor(
         ringer: AlarmRinger,
         zoneId: ZoneId,
         skipStore: OccurrenceSkipStore,
+        preAlarmNotifications: PreAlarmNotificationCanceller,
     ) : this(
         repository,
         scheduler,
@@ -48,6 +51,7 @@ class AlarmExecutionCoordinator internal constructor(
         ringer,
         zoneId,
         skipStore,
+        preAlarmNotifications,
     )
 
     suspend fun execute(
@@ -56,6 +60,9 @@ class AlarmExecutionCoordinator internal constructor(
         now: Instant,
         scheduledOccurrenceAt: Instant = now,
     ): ExecutionOutcome {
+        if (!isSnooze) {
+            runCatching { preAlarmNotifications.cancel(AlarmKind.REGULAR, alarmId) }
+        }
         val alarm = repository.getById(alarmId) ?: return ExecutionOutcome.Ignored
         if (!alarm.enabled) return ExecutionOutcome.Ignored
 

@@ -15,6 +15,7 @@ import com.smartworkalarm.domain.usecase.CalculateNextOccurrenceUseCase
 import com.smartworkalarm.prealarm.AlarmKind
 import com.smartworkalarm.prealarm.AlarmOccurrenceKey
 import com.smartworkalarm.prealarm.OccurrenceSkipStore
+import com.smartworkalarm.prealarm.PreAlarmNotificationCanceller
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -108,6 +109,7 @@ class ShiftAlarmExecutionCoordinatorTest {
             ringer = noOpRinger(),
             zoneId = zone,
             skipStore = SkipStore(),
+            preAlarmNotifications = noOpPreAlarmNotifications(),
         )
 
         val outcome = coordinator.execute(
@@ -140,6 +142,7 @@ class ShiftAlarmExecutionCoordinatorTest {
             ringer = noOpRinger(),
             zoneId = zone,
             skipStore = SkipStore(),
+            preAlarmNotifications = noOpPreAlarmNotifications(),
         )
 
         val outcome = coordinator.execute(
@@ -184,6 +187,7 @@ class ShiftAlarmExecutionCoordinatorTest {
             },
             zoneId = zone,
             skipStore = SkipStore(),
+            preAlarmNotifications = noOpPreAlarmNotifications(),
         )
 
         coordinator.execute(disabledSnoozeNight.id, false, now)
@@ -280,6 +284,22 @@ class ShiftAlarmExecutionCoordinatorTest {
         assertEquals(true, skips.consume(regularKey))
     }
 
+    @Test
+    fun `fired shift occurrence clears its posted pre-alert even when group is disabled`() = runTest {
+        val cancellations = mutableListOf<Pair<AlarmKind, Long>>()
+        val coordinator = coordinator(
+            result = ShiftDayEvaluation.Matched(night.id, night.name),
+            group = ShiftAlarmGroup(10, "교대", enabled = false, emergencyShiftTypeId = null),
+            preAlarmNotifications = PreAlarmNotificationCanceller { kind, id ->
+                cancellations += kind to id
+            },
+        )
+
+        assertEquals(ExecutionOutcome.Ignored, coordinator.execute(night.id, false, now))
+
+        assertEquals(listOf(AlarmKind.SHIFT to night.id), cancellations)
+    }
+
     private fun coordinator(
         result: ShiftDayEvaluation,
         emergencyId: Long? = null,
@@ -289,8 +309,10 @@ class ShiftAlarmExecutionCoordinatorTest {
         onEvaluate: () -> Unit = {},
         onRing: () -> Unit = {},
         skipStore: OccurrenceSkipStore = SkipStore(),
+        group: ShiftAlarmGroup = ShiftAlarmGroup(10, "교대", true, emergencyId),
+        preAlarmNotifications: PreAlarmNotificationCanceller = noOpPreAlarmNotifications(),
     ) = ShiftAlarmExecutionCoordinator(
-        repository = Repository(ShiftAlarmGroup(10, "교대", true, emergencyId), listOf(day, night)),
+        repository = Repository(group, listOf(day, night)),
         scheduler = Scheduler(onSchedule),
         calculator = CalculateNextOccurrenceUseCase(),
         decisionProvider = { _, _, _ ->
@@ -301,6 +323,7 @@ class ShiftAlarmExecutionCoordinatorTest {
         ringer = noOpRinger(onRing),
         zoneId = zone,
         skipStore = skipStore,
+        preAlarmNotifications = preAlarmNotifications,
     )
 
     private fun productionCoordinator(
@@ -322,6 +345,7 @@ class ShiftAlarmExecutionCoordinatorTest {
         ringer = noOpRinger(),
         zoneId = zone,
         skipStore = SkipStore(),
+        preAlarmNotifications = noOpPreAlarmNotifications(),
     )
 
     private fun event(title: String) = CalendarEvent(
@@ -374,6 +398,8 @@ class ShiftAlarmExecutionCoordinatorTest {
             snoozeMinutes: Int,
         ) = onRing()
     }
+
+    private fun noOpPreAlarmNotifications() = PreAlarmNotificationCanceller { _, _ -> }
 
     private class Scheduler(
         private val onSchedule: () -> Unit,

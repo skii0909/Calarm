@@ -1,12 +1,16 @@
 package com.smartworkalarm.prealarm
 
 import android.content.SharedPreferences
+import java.time.Clock
 import java.time.Instant
+import java.time.ZoneOffset
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class SharedPreferencesOccurrenceSkipStoreTest {
+    private val defaultNow = Instant.parse("2026-08-26T12:00:00Z")
+
     @Test
     fun `marked occurrence is consumed exactly once`() {
         val store = store()
@@ -35,9 +39,9 @@ class SharedPreferencesOccurrenceSkipStoreTest {
         val preferences = InMemorySharedPreferences()
         val key = occurrence(1L, "2026-08-26T22:00:00Z")
 
-        SharedPreferencesOccurrenceSkipStore(preferences).mark(key)
+        store(preferences).mark(key)
 
-        assertTrue(SharedPreferencesOccurrenceSkipStore(preferences).consume(key))
+        assertTrue(store(preferences).consume(key))
     }
 
     @Test
@@ -54,8 +58,8 @@ class SharedPreferencesOccurrenceSkipStoreTest {
 
     @Test
     fun `pruning removes occurrences older than twenty four hours and preserves newer ones`() {
-        val store = store()
         val now = Instant.parse("2026-08-27T22:00:00Z")
+        val store = store(now = Instant.parse("2026-08-26T20:00:00Z"))
         val stale = occurrence(1L, "2026-08-26T21:59:59Z")
         val recent = occurrence(2L, "2026-08-26T22:00:00Z")
         store.mark(stale)
@@ -67,7 +71,44 @@ class SharedPreferencesOccurrenceSkipStoreTest {
         assertTrue(store.consume(recent))
     }
 
-    private fun store() = SharedPreferencesOccurrenceSkipStore(InMemorySharedPreferences())
+    @Test
+    fun `mark prunes stored stale occurrences before persisting a new skip`() {
+        val preferences = InMemorySharedPreferences()
+        val stale = occurrence(1L, "2026-08-26T21:59:59Z")
+        val current = occurrence(2L, "2026-08-28T07:00:00Z")
+        store(preferences, Instant.parse("2026-08-26T20:00:00Z")).mark(stale)
+        val maintained = store(preferences, Instant.parse("2026-08-27T22:00:00Z"))
+
+        maintained.mark(current)
+
+        assertFalse(maintained.consume(stale))
+        assertTrue(maintained.consume(current))
+    }
+
+    @Test
+    fun `consume prunes stale entries even when requested occurrence is absent`() {
+        val preferences = InMemorySharedPreferences()
+        val stale = occurrence(1L, "2026-08-26T21:59:59Z")
+        val boundary = occurrence(2L, "2026-08-26T22:00:00Z")
+        val missing = occurrence(3L, "2026-08-28T07:00:00Z")
+        val initial = store(preferences, Instant.parse("2026-08-26T20:00:00Z"))
+        initial.mark(stale)
+        initial.mark(boundary)
+
+        assertFalse(store(preferences, Instant.parse("2026-08-27T22:00:00Z")).consume(missing))
+
+        val retained = preferences.getStringSet("skipped_alarm_occurrences", mutableSetOf()).orEmpty()
+        assertFalse(stale.encode() in retained)
+        assertTrue(boundary.encode() in retained)
+    }
+
+    private fun store(
+        preferences: SharedPreferences = InMemorySharedPreferences(),
+        now: Instant = defaultNow,
+    ) = SharedPreferencesOccurrenceSkipStore(
+        preferences = preferences,
+        clock = Clock.fixed(now, ZoneOffset.UTC),
+    )
 
     private fun occurrence(id: Long, scheduledAt: String) =
         AlarmOccurrenceKey(AlarmKind.REGULAR, id, Instant.parse(scheduledAt))

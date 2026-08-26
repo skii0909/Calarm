@@ -1,13 +1,21 @@
 package com.smartworkalarm.alarm
 
 import android.app.AlarmManager
+import android.app.NotificationManager
 import android.content.Context
+import com.smartworkalarm.MainActivity
 import com.smartworkalarm.domain.repository.ScheduleResult
+import com.smartworkalarm.prealarm.AlarmKind
+import com.smartworkalarm.prealarm.AlarmOccurrenceKey
 import com.smartworkalarm.prealarm.PreAlarmContract
+import com.smartworkalarm.prealarm.PreAlarmNotificationCanceller
+import com.smartworkalarm.prealarm.PreAlarmNotificationFactory
 import java.time.Clock
 import java.time.Instant
 import java.time.ZoneOffset
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -41,6 +49,7 @@ class AlarmSchedulerImplTest {
             setOf(AlarmSchedulerImpl.ACTION_ALARM, PreAlarmContract.ACTION_PRE_ALARM),
             scheduled.map { shadowOf(it.operation).savedIntent.action }.toSet(),
         )
+        assertSeparateAlarmSemantics(scheduled, AlarmSchedulerImpl.ACTION_ALARM)
 
         scheduler.cancel(41)
 
@@ -65,13 +74,151 @@ class AlarmSchedulerImplTest {
             setOf(AlarmSchedulerImpl.ACTION_SHIFT_ALARM, PreAlarmContract.ACTION_PRE_ALARM),
             scheduled.map { shadowOf(it.operation).savedIntent.action }.toSet(),
         )
+        assertSeparateAlarmSemantics(scheduled, AlarmSchedulerImpl.ACTION_SHIFT_ALARM)
 
         scheduler.cancelShift(73)
 
         assertTrue(shadowOf(alarmManager).scheduledAlarms.isEmpty())
     }
 
-    private fun scheduler(): Pair<AlarmSchedulerImpl, AlarmManager> {
+    @Test
+    fun `immediate pre-alert uses separate semantics and leaves the real alarm clock scheduled`() {
+        val (scheduler, alarmManager) = scheduler()
+        val nearOccurrence = now.plusSeconds(5 * 60L)
+
+        assertEquals(ScheduleResult.Scheduled, scheduler.schedule(41, nearOccurrence))
+
+        val scheduled = shadowOf(alarmManager).scheduledAlarms
+        assertEquals(2, scheduled.size)
+        assertEquals(
+            setOf(now.toEpochMilli(), nearOccurrence.toEpochMilli()),
+            scheduled.map { it.triggerAtMs }.toSet(),
+        )
+        assertSeparateAlarmSemantics(scheduled, AlarmSchedulerImpl.ACTION_ALARM)
+    }
+
+    @Test
+    fun `snooze stays exact while idle and never gains a pre-alert`() {
+        val (scheduler, alarmManager) = scheduler()
+
+        assertEquals(ScheduleResult.Scheduled, scheduler.scheduleSnooze(41, occurrenceAt))
+
+        val scheduled = shadowOf(alarmManager).scheduledAlarms
+        assertEquals(1, scheduled.size)
+        assertEquals(AlarmSchedulerImpl.ACTION_ALARM, shadowOf(scheduled.single().operation).savedIntent.action)
+        assertEquals(
+            AlarmBroadcastReceiver::class.java.name,
+            shadowOf(scheduled.single().operation).savedIntent.component?.className,
+        )
+        assertTrue(scheduled.single().isAllowWhileIdle)
+        assertNull(scheduled.single().alarmClockInfo)
+    }
+
+    @Test
+    fun `colliding long hash ids retain independent real and pre-alert scheduling identities`() {
+        val (scheduler, alarmManager) = scheduler()
+        val firstId = 1L
+        val collidingId = 1L shl 32
+        val laterOccurrence = occurrenceAt.plusSeconds(60 * 60L)
+
+        scheduler.schedule(firstId, occurrenceAt)
+        scheduler.schedule(collidingId, laterOccurrence)
+
+        val scheduled = shadowOf(alarmManager).scheduledAlarms
+        assertEquals(4, scheduled.size)
+        assertEquals(4, scheduled.map { shadowOf(it.operation).savedIntent.data }.toSet().size)
+        assertEquals(
+            setOf(firstId, collidingId),
+            scheduled.map { scheduledAlarmId(shadowOf(it.operation).savedIntent) }.toSet(),
+        )
+
+        scheduler.cancel(firstId)
+
+        val remaining = shadowOf(alarmManager).scheduledAlarms
+        assertEquals(2, remaining.size)
+        assertTrue(remaining.all { scheduledAlarmId(shadowOf(it.operation).savedIntent) == collidingId })
+    }
+
+    @Test
+    fun `cancelling an alarm clears its currently posted pre-alert notification`() {
+        val (scheduler, _) = scheduler()
+        val (notifications, notificationManager) = notifications()
+        notifications.post(
+            AlarmOccurrenceKey(AlarmKind.REGULAR, 41L, occurrenceAt),
+            "출근",
+        )
+        assertEquals(1, shadowOf(notificationManager).size())
+
+        scheduler.cancel(41L)
+
+        assertEquals(0, shadowOf(notificationManager).size())
+    }
+
+    @Test
+    fun `rescheduling a shift clears its currently posted pre-alert notification`() {
+        val (scheduler, _) = scheduler()
+        val (notifications, notificationManager) = notifications()
+        notifications.post(
+            AlarmOccurrenceKey(AlarmKind.SHIFT, 73L, occurrenceAt),
+            "주간",
+        )
+        assertEquals(1, shadowOf(notificationManager).size())
+
+        scheduler.scheduleShift(73L, occurrenceAt.plusSeconds(60 * 60L))
+
+        assertEquals(0, shadowOf(notificationManager).size())
+    }
+
+    @Test
+    fun `notification cleanup failure does not block real alarm scheduling or cancellation`() {
+        val (scheduler, alarmManager) = scheduler(
+            PreAlarmNotificationCanceller { _, _ -> error("notification service unavailable") },
+        )
+
+        assertEquals(ScheduleResult.Scheduled, scheduler.schedule(41L, occurrenceAt))
+        assertEquals(2, shadowOf(alarmManager).scheduledAlarms.size)
+
+        scheduler.cancel(41L)
+
+        assertTrue(shadowOf(alarmManager).scheduledAlarms.isEmpty())
+    }
+
+    private fun scheduledAlarmId(intent: android.content.Intent): Long =
+        when (intent.action) {
+            AlarmSchedulerImpl.ACTION_ALARM ->
+                intent.getLongExtra(AlarmSchedulerImpl.EXTRA_ALARM_ID, -1L)
+            PreAlarmContract.ACTION_PRE_ALARM ->
+                intent.getLongExtra(PreAlarmContract.EXTRA_ID, -1L)
+            else -> -1L
+        }
+
+    private fun assertSeparateAlarmSemantics(
+        scheduled: List<org.robolectric.shadows.ShadowAlarmManager.ScheduledAlarm>,
+        realAction: String,
+    ) {
+        val realAlarm = scheduled.single { shadowOf(it.operation).savedIntent.action == realAction }
+        val preAlarm = scheduled.single {
+            shadowOf(it.operation).savedIntent.action == PreAlarmContract.ACTION_PRE_ALARM
+        }
+
+        assertNotNull(realAlarm.alarmClockInfo)
+        assertEquals(
+            AlarmBroadcastReceiver::class.java.name,
+            shadowOf(realAlarm.operation).savedIntent.component?.className,
+        )
+        val showIntent = realAlarm.alarmClockInfo!!.showIntent
+        assertNotNull(showIntent)
+        assertEquals(
+            MainActivity::class.java.name,
+            shadowOf(showIntent).savedIntent.component?.className,
+        )
+        assertNull(preAlarm.alarmClockInfo)
+        assertTrue(preAlarm.isAllowWhileIdle)
+    }
+
+    private fun scheduler(
+        preAlarmNotifications: PreAlarmNotificationCanceller? = null,
+    ): Pair<AlarmSchedulerImpl, AlarmManager> {
         val context = RuntimeEnvironment.getApplication().applicationContext
         val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
         shadowOf(alarmManager).scheduledAlarms.toList().forEach { scheduled ->
@@ -83,7 +230,19 @@ class AlarmSchedulerImplTest {
             permission = ExactAlarmPermission(alarmManager),
             auditStore = NoOpAuditStore,
             clock = Clock.fixed(now, ZoneOffset.UTC),
+            preAlarmNotifications = preAlarmNotifications ?: PreAlarmNotificationFactory(
+                context,
+                context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager,
+            ),
         ) to alarmManager
+    }
+
+    private fun notifications(): Pair<PreAlarmNotificationFactory, NotificationManager> {
+        val context = RuntimeEnvironment.getApplication().applicationContext
+        val notificationManager =
+            context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        notificationManager.cancelAll()
+        return PreAlarmNotificationFactory(context, notificationManager) to notificationManager
     }
 
     private object NoOpAuditStore : AlarmScheduleAuditStore {

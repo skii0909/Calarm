@@ -32,10 +32,14 @@ internal object PreAlarmNotificationText {
 internal fun canPostPreAlarmNotification(sdkInt: Int, permissionGranted: Boolean): Boolean =
     sdkInt < Build.VERSION_CODES.TIRAMISU || permissionGranted
 
+fun interface PreAlarmNotificationCanceller {
+    fun cancel(kind: AlarmKind, id: Long)
+}
+
 class PreAlarmNotificationFactory @Inject constructor(
     @param:ApplicationContext private val context: Context,
     private val notificationManager: NotificationManager,
-) {
+) : PreAlarmNotificationCanceller {
     fun ensureChannel() {
         notificationManager.createNotificationChannel(
             NotificationChannel(
@@ -70,7 +74,7 @@ class PreAlarmNotificationFactory @Inject constructor(
         runCatching {
             ensureChannel()
             notificationManager.notify(
-                key.encode(),
+                notificationTag(key.kind, key.id),
                 NOTIFICATION_ID,
                 NotificationCompat.Builder(context, CHANNEL_ID)
                     .setSmallIcon(R.drawable.ic_launcher_alarm)
@@ -89,7 +93,13 @@ class PreAlarmNotificationFactory @Inject constructor(
     }
 
     fun cancel(key: AlarmOccurrenceKey) {
-        notificationManager.cancel(key.encode(), NOTIFICATION_ID)
+        cancel(key.kind, key.id)
+    }
+
+    override fun cancel(kind: AlarmKind, id: Long) {
+        runCatching {
+            notificationManager.cancel(notificationTag(kind, id), NOTIFICATION_ID)
+        }
     }
 
     private fun actionPendingIntent(
@@ -115,5 +125,8 @@ class PreAlarmNotificationFactory @Inject constructor(
         private const val SKIP_REQUEST_OFFSET = 6_000_000
         private const val KEEP_REQUEST_OFFSET = 7_000_000
         private val VIBRATION_PATTERN = longArrayOf(0L, 300L, 200L, 300L)
+
+        private fun notificationTag(kind: AlarmKind, id: Long): String =
+            "pre-alarm:${kind.name}:$id"
     }
 }

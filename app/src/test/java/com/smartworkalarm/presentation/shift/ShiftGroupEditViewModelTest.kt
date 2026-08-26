@@ -282,6 +282,50 @@ class ShiftGroupEditViewModelTest {
     }
 
     @Test
+    fun `reloaded persisted draft remains dirty and discard cleans it up`() = runTest(dispatcher) {
+        val persistedDraft = groupWithTypes().let { aggregate ->
+            aggregate.copy(group = aggregate.group.copy(id = 11L, isDraft = true))
+        }
+        val repository = FakeShiftRepository(persistedDraft)
+        val viewModel = viewModel(repository)
+
+        viewModel.loadGroup(11L)
+        advanceUntilIdle()
+
+        assertTrue(viewModel.state.value.isDraft)
+        assertTrue(viewModel.state.value.hasUnsavedChanges)
+
+        viewModel.discardGroupChanges()
+        advanceUntilIdle()
+
+        assertEquals(listOf(11L), repository.deletedGroups)
+    }
+
+    @Test
+    fun `draft reload is guarded immediately and early discard still cleans persisted draft`() =
+        runTest(dispatcher) {
+            val persistedDraft = groupWithTypes().let { aggregate ->
+                aggregate.copy(group = aggregate.group.copy(id = 11L, isDraft = true))
+            }
+            val repository = FakeShiftRepository(persistedDraft)
+            val loadCompletion = CompletableDeferred<Unit>()
+            repository.groupLoadCompletion = loadCompletion
+            val viewModel = viewModel(repository)
+
+            viewModel.loadGroup(11L)
+            runCurrent()
+
+            assertTrue(viewModel.state.value.hasUnsavedChanges)
+
+            viewModel.discardGroupChanges()
+            runCurrent()
+            loadCompletion.complete(Unit)
+            advanceUntilIdle()
+
+            assertEquals(listOf(11L), repository.deletedGroups)
+        }
+
+    @Test
     fun `repeated draft taps create one group and navigate once`() = runTest(dispatcher) {
         val repository = FakeShiftRepository(groupWithTypes())
         val viewModel = viewModel(repository)
@@ -467,11 +511,15 @@ class ShiftGroupEditViewModelTest {
         val savedGroups = mutableListOf<ShiftAlarmGroup>()
         val savedTypes = mutableListOf<ShiftTypeAlarm>()
         val deletedGroups = mutableListOf<Long>()
+        var groupLoadCompletion: CompletableDeferred<Unit>? = null
         var groupSaveCompletion: CompletableDeferred<Unit>? = null
         var shiftTypeSaveCompletion: CompletableDeferred<Unit>? = null
 
         override fun observeGroupsWithTypes() = groups
-        override suspend fun getGroupWithTypes(groupId: Long) = groups.value.firstOrNull { it.group.id == groupId }
+        override suspend fun getGroupWithTypes(groupId: Long): ShiftAlarmRepository.GroupWithTypes? {
+            groupLoadCompletion?.await()
+            return groups.value.firstOrNull { it.group.id == groupId }
+        }
         override suspend fun getShiftType(id: Long) = groups.value.flatMap { it.shiftTypes }.firstOrNull { it.id == id }
         override suspend fun getEnabledShiftTypes() = groups.value.flatMap { it.shiftTypes }.filter { it.enabled }
         override suspend fun upsertGroup(group: ShiftAlarmGroup): Long {

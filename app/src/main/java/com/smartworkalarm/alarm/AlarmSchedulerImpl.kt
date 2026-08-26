@@ -4,12 +4,15 @@ import android.app.AlarmManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
+import com.smartworkalarm.MainActivity
 import com.smartworkalarm.domain.repository.AlarmScheduler
 import com.smartworkalarm.domain.repository.ScheduleResult
 import com.smartworkalarm.domain.repository.ShiftAlarmScheduler
 import com.smartworkalarm.prealarm.AlarmKind
 import com.smartworkalarm.prealarm.AlarmOccurrenceKey
 import com.smartworkalarm.prealarm.PreAlarmContract
+import com.smartworkalarm.prealarm.PreAlarmNotificationCanceller
 import com.smartworkalarm.prealarm.PreAlarmReceiver
 import com.smartworkalarm.prealarm.preAlarmTriggerAt
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -23,18 +26,22 @@ class AlarmSchedulerImpl @Inject constructor(
     private val permission: ExactAlarmPermission,
     private val auditStore: AlarmScheduleAuditStore,
     private val clock: Clock,
+    private val preAlarmNotifications: PreAlarmNotificationCanceller,
 ) : AlarmScheduler, ShiftAlarmScheduler {
-    override fun schedule(alarmId: Long, triggerAt: Instant): ScheduleResult =
-        scheduleExact(alarmId, triggerAt, snooze = false).also { result ->
+    override fun schedule(alarmId: Long, triggerAt: Instant): ScheduleResult {
+        cancelPostedPreAlarmSafely(AlarmKind.REGULAR, alarmId)
+        return scheduleExact(alarmId, triggerAt, snooze = false).also { result ->
             if (result == ScheduleResult.Scheduled) {
                 schedulePreAlarmSafely(AlarmKind.REGULAR, alarmId, triggerAt)
             }
         }
+    }
 
     override fun scheduleSnooze(alarmId: Long, triggerAt: Instant): ScheduleResult =
         scheduleExact(alarmId, triggerAt, snooze = true)
 
     override fun cancel(alarmId: Long) {
+        cancelPostedPreAlarmSafely(AlarmKind.REGULAR, alarmId)
         alarmManager.cancel(pendingIntent(alarmId, snooze = false, Instant.EPOCH))
         recordAuditSafely { auditStore.recordCancelled(regularAuditKey(alarmId, snooze = false)) }
         alarmManager.cancel(pendingIntent(alarmId, snooze = true, Instant.EPOCH))
@@ -42,13 +49,15 @@ class AlarmSchedulerImpl @Inject constructor(
         alarmManager.cancel(preAlarmPendingIntent(AlarmKind.REGULAR, alarmId, Instant.EPOCH))
     }
 
-    override fun scheduleShift(shiftTypeId: Long, triggerAt: Instant): ScheduleResult =
-        scheduleShiftExact(shiftTypeId, triggerAt, snooze = false, scheduledOccurrenceAt = triggerAt)
+    override fun scheduleShift(shiftTypeId: Long, triggerAt: Instant): ScheduleResult {
+        cancelPostedPreAlarmSafely(AlarmKind.SHIFT, shiftTypeId)
+        return scheduleShiftExact(shiftTypeId, triggerAt, snooze = false, scheduledOccurrenceAt = triggerAt)
             .also { result ->
                 if (result == ScheduleResult.Scheduled) {
                     schedulePreAlarmSafely(AlarmKind.SHIFT, shiftTypeId, triggerAt)
                 }
             }
+    }
 
     override fun scheduleShiftSnooze(
         shiftTypeId: Long,
@@ -57,6 +66,7 @@ class AlarmSchedulerImpl @Inject constructor(
     ): ScheduleResult = scheduleShiftExact(shiftTypeId, triggerAt, snooze = true, scheduledOccurrenceAt)
 
     override fun cancelShift(shiftTypeId: Long) {
+        cancelPostedPreAlarmSafely(AlarmKind.SHIFT, shiftTypeId)
         alarmManager.cancel(shiftPendingIntent(shiftTypeId, snooze = false, Instant.EPOCH))
         recordAuditSafely { auditStore.recordCancelled(shiftAuditKey(shiftTypeId, snooze = false)) }
         alarmManager.cancel(shiftPendingIntent(shiftTypeId, snooze = true, Instant.EPOCH))
@@ -66,11 +76,22 @@ class AlarmSchedulerImpl @Inject constructor(
 
     private fun scheduleExact(alarmId: Long, triggerAt: Instant, snooze: Boolean): ScheduleResult {
         if (!permission.isGranted()) return ScheduleResult.ExactAlarmPermissionRequired
-        alarmManager.setExactAndAllowWhileIdle(
-            AlarmManager.RTC_WAKEUP,
-            triggerAt.toEpochMilli(),
-            pendingIntent(alarmId, snooze, triggerAt),
-        )
+        val operation = pendingIntent(alarmId, snooze, triggerAt)
+        if (snooze) {
+            alarmManager.setExactAndAllowWhileIdle(
+                AlarmManager.RTC_WAKEUP,
+                triggerAt.toEpochMilli(),
+                operation,
+            )
+        } else {
+            alarmManager.setAlarmClock(
+                AlarmManager.AlarmClockInfo(
+                    triggerAt.toEpochMilli(),
+                    alarmClockShowIntent(AlarmKind.REGULAR, alarmId),
+                ),
+                operation,
+            )
+        }
         recordAuditSafely { auditStore.recordScheduled(regularAuditKey(alarmId, snooze), triggerAt) }
         return ScheduleResult.Scheduled
     }
@@ -82,14 +103,35 @@ class AlarmSchedulerImpl @Inject constructor(
         scheduledOccurrenceAt: Instant,
     ): ScheduleResult {
         if (!permission.isGranted()) return ScheduleResult.ExactAlarmPermissionRequired
-        alarmManager.setExactAndAllowWhileIdle(
-            AlarmManager.RTC_WAKEUP,
-            triggerAt.toEpochMilli(),
-            shiftPendingIntent(shiftTypeId, snooze, scheduledOccurrenceAt),
-        )
+        val operation = shiftPendingIntent(shiftTypeId, snooze, scheduledOccurrenceAt)
+        if (snooze) {
+            alarmManager.setExactAndAllowWhileIdle(
+                AlarmManager.RTC_WAKEUP,
+                triggerAt.toEpochMilli(),
+                operation,
+            )
+        } else {
+            alarmManager.setAlarmClock(
+                AlarmManager.AlarmClockInfo(
+                    triggerAt.toEpochMilli(),
+                    alarmClockShowIntent(AlarmKind.SHIFT, shiftTypeId),
+                ),
+                operation,
+            )
+        }
         recordAuditSafely { auditStore.recordScheduled(shiftAuditKey(shiftTypeId, snooze), triggerAt) }
         return ScheduleResult.Scheduled
     }
+
+    private fun alarmClockShowIntent(kind: AlarmKind, id: Long): PendingIntent =
+        PendingIntent.getActivity(
+            context,
+            0,
+            Intent(context, MainActivity::class.java).apply {
+                data = Uri.parse("smartworkalarm://alarm-clock/${kind.name.lowercase()}/$id")
+            },
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
 
     private fun regularAuditKey(alarmId: Long, snooze: Boolean): String =
         "regular:$alarmId" + if (snooze) SNOOZE_AUDIT_SUFFIX else ""
@@ -102,8 +144,9 @@ class AlarmSchedulerImpl @Inject constructor(
         snooze: Boolean,
         scheduledOccurrenceAt: Instant,
     ): PendingIntent {
-        val intent = Intent(ACTION_ALARM).apply {
-            setPackage(context.packageName)
+        val intent = Intent(context, AlarmBroadcastReceiver::class.java).apply {
+            action = ACTION_ALARM
+            data = scheduledAlarmIdentity(AlarmKind.REGULAR, alarmId, snooze)
             putExtra(EXTRA_ALARM_ID, alarmId)
             putExtra(EXTRA_IS_SNOOZE, snooze)
             putExtra(EXTRA_SCHEDULED_OCCURRENCE_AT, scheduledOccurrenceAt.toEpochMilli())
@@ -122,8 +165,9 @@ class AlarmSchedulerImpl @Inject constructor(
         snooze: Boolean,
         scheduledOccurrenceAt: Instant,
     ): PendingIntent {
-        val intent = Intent(ACTION_SHIFT_ALARM).apply {
-            setPackage(context.packageName)
+        val intent = Intent(context, AlarmBroadcastReceiver::class.java).apply {
+            action = ACTION_SHIFT_ALARM
+            data = scheduledAlarmIdentity(AlarmKind.SHIFT, shiftTypeId, snooze)
             putExtra(EXTRA_SHIFT_TYPE_ID, shiftTypeId)
             putExtra(EXTRA_IS_SNOOZE, snooze)
             putExtra(EXTRA_SCHEDULED_OCCURRENCE_AT, scheduledOccurrenceAt.toEpochMilli())
@@ -148,6 +192,10 @@ class AlarmSchedulerImpl @Inject constructor(
         }
     }
 
+    private fun cancelPostedPreAlarmSafely(kind: AlarmKind, id: Long) {
+        runCatching { preAlarmNotifications.cancel(kind, id) }
+    }
+
     private fun preAlarmPendingIntent(
         kind: AlarmKind,
         id: Long,
@@ -156,6 +204,12 @@ class AlarmSchedulerImpl @Inject constructor(
         val key = AlarmOccurrenceKey(kind, id, occurrenceAt)
         val intent = Intent(context, PreAlarmReceiver::class.java).apply {
             action = PreAlarmContract.ACTION_PRE_ALARM
+            data = Uri.Builder()
+                .scheme("smartworkalarm")
+                .authority("scheduled-pre-alarm")
+                .appendPath(kind.name.lowercase())
+                .appendPath(id.toString())
+                .build()
             putExtra(PreAlarmContract.EXTRA_KIND, key.kind.name)
             putExtra(PreAlarmContract.EXTRA_ID, key.id)
             putExtra(
@@ -174,6 +228,15 @@ class AlarmSchedulerImpl @Inject constructor(
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
     }
+
+    private fun scheduledAlarmIdentity(kind: AlarmKind, id: Long, snooze: Boolean): Uri =
+        Uri.Builder()
+            .scheme("smartworkalarm")
+            .authority("scheduled-alarm")
+            .appendPath(kind.name.lowercase())
+            .appendPath(id.toString())
+            .appendPath(if (snooze) "snooze" else "occurrence")
+            .build()
 
     companion object {
         const val ACTION_ALARM = "com.smartworkalarm.ACTION_ALARM"

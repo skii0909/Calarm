@@ -9,6 +9,7 @@ import com.smartworkalarm.domain.usecase.CalculateNextOccurrenceUseCase
 import com.smartworkalarm.prealarm.AlarmKind
 import com.smartworkalarm.prealarm.AlarmOccurrenceKey
 import com.smartworkalarm.prealarm.OccurrenceSkipStore
+import com.smartworkalarm.prealarm.PreAlarmNotificationCanceller
 import java.time.Instant
 import java.time.ZoneId
 import kotlinx.coroutines.flow.Flow
@@ -139,6 +140,21 @@ class AlarmExecutionCoordinatorTest {
         assertEquals(ExecutionOutcome.Ignored, coordinator.execute(7, false, now))
     }
 
+    @Test
+    fun `fired regular occurrence clears its posted pre-alert even when alarm is missing`() = runTest {
+        val cancellations = mutableListOf<Pair<AlarmKind, Long>>()
+        val coordinator = coordinator(
+            alarm = null,
+            preAlarmNotifications = PreAlarmNotificationCanceller { kind, id ->
+                cancellations += kind to id
+            },
+        )
+
+        assertEquals(ExecutionOutcome.Ignored, coordinator.execute(7, false, now))
+
+        assertEquals(listOf(AlarmKind.REGULAR to 7L), cancellations)
+    }
+
     private fun coordinator(
         alarm: Alarm? = Alarm(7, "출근", 7, 0, 31, true, true),
         decision: AlarmExecutionDecision = AlarmExecutionDecision.RING,
@@ -147,6 +163,8 @@ class AlarmExecutionCoordinatorTest {
         onRing: (String?, Boolean) -> Unit = { _, _ -> },
         onRingAt: (Instant) -> Unit = {},
         skipStore: OccurrenceSkipStore = SkipStore(),
+        preAlarmNotifications: PreAlarmNotificationCanceller =
+            PreAlarmNotificationCanceller { _, _ -> },
     ) = AlarmExecutionCoordinator(
         repository = Repository(alarm),
         scheduler = Scheduler(onSchedule),
@@ -180,6 +198,7 @@ class AlarmExecutionCoordinatorTest {
         },
         zoneId = zone,
         skipStore = skipStore,
+        preAlarmNotifications = preAlarmNotifications,
     )
 
     private class Repository(private val alarm: Alarm?) : AlarmRepository {

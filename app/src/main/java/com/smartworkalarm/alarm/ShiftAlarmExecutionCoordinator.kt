@@ -12,6 +12,7 @@ import com.smartworkalarm.domain.usecase.CalculateNextOccurrenceUseCase
 import com.smartworkalarm.prealarm.AlarmKind
 import com.smartworkalarm.prealarm.AlarmOccurrenceKey
 import com.smartworkalarm.prealarm.OccurrenceSkipStore
+import com.smartworkalarm.prealarm.PreAlarmNotificationCanceller
 import java.time.Instant
 import java.time.DayOfWeek
 import java.time.LocalDate
@@ -30,6 +31,7 @@ class ShiftAlarmExecutionCoordinator internal constructor(
     private val ringer: AlarmRinger,
     private val zoneId: ZoneId,
     private val skipStore: OccurrenceSkipStore,
+    private val preAlarmNotifications: PreAlarmNotificationCanceller,
 ) {
     @Inject
     constructor(
@@ -41,6 +43,7 @@ class ShiftAlarmExecutionCoordinator internal constructor(
         ringer: AlarmRinger,
         zoneId: ZoneId,
         skipStore: OccurrenceSkipStore,
+        preAlarmNotifications: PreAlarmNotificationCanceller,
     ) : this(
         repository = repository,
         scheduler = scheduler,
@@ -57,6 +60,7 @@ class ShiftAlarmExecutionCoordinator internal constructor(
         ringer = ringer,
         zoneId = zoneId,
         skipStore = skipStore,
+        preAlarmNotifications = preAlarmNotifications,
     )
 
     suspend fun execute(
@@ -65,6 +69,9 @@ class ShiftAlarmExecutionCoordinator internal constructor(
         now: Instant,
         scheduledOccurrenceAt: Instant = now,
     ): ExecutionOutcome {
+        if (!isSnooze) {
+            runCatching { preAlarmNotifications.cancel(AlarmKind.SHIFT, shiftTypeId) }
+        }
         val shiftType = repository.getShiftType(shiftTypeId) ?: return ExecutionOutcome.Ignored
         val group = repository.getGroupWithTypes(shiftType.groupId) ?: return ExecutionOutcome.Ignored
         val occurrenceDate = scheduledOccurrenceAt.atZone(zoneId).toLocalDate()

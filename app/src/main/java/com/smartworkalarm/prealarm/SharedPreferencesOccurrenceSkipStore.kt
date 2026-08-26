@@ -1,30 +1,34 @@
 package com.smartworkalarm.prealarm
 
 import android.content.SharedPreferences
+import java.time.Clock
 import java.time.Instant
 
 class SharedPreferencesOccurrenceSkipStore(
     private val preferences: SharedPreferences,
+    private val clock: Clock,
 ) : OccurrenceSkipStore {
     override fun mark(key: AlarmOccurrenceKey) = synchronized(LOCK) {
         val entries = readEntries().apply { add(key.encode()) }
-        persist(entries)
+        persist(retainedEntries(entries, clock.instant()))
     }
 
     override fun consume(key: AlarmOccurrenceKey): Boolean = synchronized(LOCK) {
-        val entries = readEntries()
-        if (!entries.remove(key.encode())) return false
-
+        val entries = retainedEntries(readEntries(), clock.instant())
+        val consumed = entries.remove(key.encode())
         persist(entries)
-        true
+        consumed
     }
 
     override fun prune(now: Instant) = synchronized(LOCK) {
+        persist(retainedEntries(readEntries(), now))
+    }
+
+    private fun retainedEntries(entries: Set<String>, now: Instant): MutableSet<String> {
         val cutoff = now.minusSeconds(RETENTION_SECONDS)
-        val retained = readEntries().filterTo(mutableSetOf()) { encoded ->
+        return entries.filterTo(mutableSetOf()) { encoded ->
             AlarmOccurrenceKey.decode(encoded)?.scheduledAt?.isBefore(cutoff) == false
         }
-        persist(retained)
     }
 
     private fun readEntries(): MutableSet<String> = preferences
