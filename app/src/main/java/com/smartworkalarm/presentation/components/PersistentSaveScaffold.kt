@@ -6,9 +6,10 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
@@ -39,6 +40,7 @@ internal fun PersistentSaveScaffold(
     saveLabel: String,
     onSave: () -> Unit,
     scrollState: ScrollState,
+    bottomBarInsets: WindowInsets = WindowInsets.navigationBars,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     Scaffold(
@@ -48,16 +50,21 @@ internal fun PersistentSaveScaffold(
                 tonalElevation = 3.dp,
                 shadowElevation = 8.dp,
             ) {
-                Button(
-                    onClick = onSave,
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .navigationBarsPadding()
-                        .padding(horizontal = 18.dp, vertical = 10.dp)
-                        .testTag("persistent-save-action"),
-                    shape = MaterialTheme.shapes.extraLarge,
+                        .windowInsetsPadding(bottomBarInsets)
+                        .padding(horizontal = 18.dp, vertical = 10.dp),
                 ) {
-                    Text(saveLabel)
+                    Button(
+                        onClick = onSave,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("persistent-save-action"),
+                        shape = MaterialTheme.shapes.extraLarge,
+                    ) {
+                        Text(saveLabel)
+                    }
                 }
             }
         },
