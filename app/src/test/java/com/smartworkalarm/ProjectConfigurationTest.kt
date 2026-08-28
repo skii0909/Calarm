@@ -25,6 +25,18 @@ class ProjectConfigurationTest {
     }
 
     @Test
+    fun `application uses adaptive launcher and round icons`() {
+        val application = RuntimeEnvironment.getApplication()
+        val resources = application.resources
+        val launcherIcon = resources.getIdentifier("ic_launcher", "mipmap", application.packageName)
+        val roundIcon = resources.getIdentifier("ic_launcher_round", "mipmap", application.packageName)
+
+        assertTrue("Adaptive launcher icon must exist", launcherIcon != 0)
+        assertTrue("Round launcher icon must exist", roundIcon != 0)
+        assertEquals(launcherIcon, application.applicationInfo.icon)
+    }
+
+    @Test
     fun `pre-alarm channel creation failure does not abort application initialization`() {
         val result: Result<Unit> = runCatching {
             initializePreAlarmChannelSafely {
