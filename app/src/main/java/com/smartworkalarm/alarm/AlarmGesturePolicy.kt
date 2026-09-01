@@ -3,6 +3,7 @@ package com.smartworkalarm.alarm
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.sp
+import kotlin.math.max
 import kotlin.math.min
 
 internal const val SNOOZE_HOLD_MILLIS = 3_000L
@@ -34,6 +35,18 @@ internal fun resolveDragSample(
     if (cancelled) return ResolvedDragSample(Offset.Zero, dismiss = false)
     val offset = dragDisplacement(downPosition, currentPosition)
     return ResolvedDragSample(offset, shouldDismiss(offset.getDistance(), thresholdPx))
+}
+
+internal fun dismissReleaseTarget(
+    sample: ResolvedDragSample,
+    exitDistancePx: Float,
+): Offset {
+    if (!sample.dismiss) return Offset.Zero
+    val distance = sample.offset.getDistance()
+    if (distance == 0f) return Offset.Zero
+    val targetDistance = max(distance, exitDistancePx)
+    val scale = targetDistance / distance
+    return Offset(sample.offset.x * scale, sample.offset.y * scale)
 }
 
 internal fun snoozeHoldProgress(elapsedMillis: Long): Float =

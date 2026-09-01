@@ -76,6 +76,32 @@ class AlarmGesturePolicyTest {
     }
 
     @Test
+    fun `completed drag continues outward in the same direction instead of returning to center`() {
+        val sample = ResolvedDragSample(
+            offset = Offset(60f, 80f),
+            dismiss = true,
+        )
+
+        assertEquals(
+            Offset(180f, 240f),
+            dismissReleaseTarget(sample, exitDistancePx = 300f),
+        )
+    }
+
+    @Test
+    fun `incomplete drag release returns to center`() {
+        val sample = ResolvedDragSample(
+            offset = Offset(60f, 80f),
+            dismiss = false,
+        )
+
+        assertEquals(
+            Offset.Zero,
+            dismissReleaseTarget(sample, exitDistancePx = 300f),
+        )
+    }
+
+    @Test
     fun `hold progress follows monotonic elapsed time independent of animation scale`() {
         assertEquals(0f, snoozeHoldProgress(elapsedMillis = 0L))
         assertEquals(1f / 3f, snoozeHoldProgress(elapsedMillis = 1_000L), 0.0001f)
