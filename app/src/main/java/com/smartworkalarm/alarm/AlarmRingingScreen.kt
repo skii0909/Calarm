@@ -150,6 +150,7 @@ internal fun AlarmRingingScreen(
                 DragToDismissZone(
                     animationsDisabled = animationsDisabled,
                     actionsEnabled = actionsEnabled,
+                    dismissFailed = persistentError != null,
                     thresholdPx = dismissThresholdPx,
                     onDismiss = onDismiss,
                     modifier = Modifier.weight(if (presentation.snoozeEnabled) 1.7f else 2.15f),
@@ -335,6 +336,7 @@ private fun HoldToSnoozeZone(
 private fun DragToDismissZone(
     animationsDisabled: Boolean,
     actionsEnabled: Boolean,
+    dismissFailed: Boolean,
     thresholdPx: Float,
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
@@ -343,19 +345,37 @@ private fun DragToDismissZone(
     val currentOnDismiss by rememberUpdatedState(onDismiss)
     var dragTarget by remember { mutableStateOf(Offset.Zero) }
     var isDragging by remember { mutableStateOf(false) }
+    var dismissCommitted by remember { mutableStateOf(false) }
+    var awaitingDismissResult by remember { mutableStateOf(false) }
     val dragOffset by animateValueAsState(
         targetValue = dragTarget,
         typeConverter = Offset.VectorConverter,
-        animationSpec = if (isDragging) {
-            snap()
-        } else {
-            spring(
+        animationSpec = when {
+            isDragging || (dismissCommitted && animationsDisabled) -> snap()
+            dismissCommitted -> tween(durationMillis = 220)
+            else -> spring(
                 dampingRatio = Spring.DampingRatioMediumBouncy,
                 stiffness = Spring.StiffnessMediumLow,
             )
         },
         label = "dismiss drag offset",
     )
+
+    LaunchedEffect(actionsEnabled, dismissFailed) {
+        when {
+            actionsEnabled && dismissFailed && dismissCommitted -> {
+                awaitingDismissResult = false
+                dismissCommitted = false
+                dragTarget = Offset.Zero
+            }
+            !actionsEnabled && dismissCommitted -> awaitingDismissResult = true
+            actionsEnabled && awaitingDismissResult -> {
+                awaitingDismissResult = false
+                dismissCommitted = false
+                dragTarget = Offset.Zero
+            }
+        }
+    }
     val animatedPulse = if (animationsDisabled) {
         0.32f
     } else {
@@ -442,6 +462,7 @@ private fun DragToDismissZone(
                                     awaitEachGesture {
                                         val down = awaitFirstDown(requireUnconsumed = false)
                                         isDragging = true
+                                        dismissCommitted = false
                                         dragTarget = Offset.Zero
                                         var completed = false
 
@@ -460,6 +481,12 @@ private fun DragToDismissZone(
                                             change.consume()
                                             if (sample.dismiss) {
                                                 completed = true
+                                                isDragging = false
+                                                dismissCommitted = true
+                                                dragTarget = dismissReleaseTarget(
+                                                    sample = sample,
+                                                    exitDistancePx = thresholdPx * 3f,
+                                                )
                                                 haptic.performHapticFeedback(
                                                     HapticFeedbackType.LongPress,
                                                 )
@@ -470,11 +497,11 @@ private fun DragToDismissZone(
                                         }
 
                                         isDragging = false
-                                        dragTarget = Offset.Zero
+                                        if (!dismissCommitted) dragTarget = Offset.Zero
                                     }
                                 } finally {
                                     isDragging = false
-                                    dragTarget = Offset.Zero
+                                    if (!dismissCommitted) dragTarget = Offset.Zero
                                 }
                             }
                         } else {
