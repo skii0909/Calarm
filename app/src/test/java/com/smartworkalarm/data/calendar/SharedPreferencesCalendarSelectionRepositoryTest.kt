@@ -64,6 +64,27 @@ class SharedPreferencesCalendarSelectionRepositoryTest {
     }
 
     @Test
+    fun `returning calendar retains explicit deselection after temporary disappearance`() {
+        val repository = repository()
+        repository.reconcile(setOf(10L, 20L)).getOrThrow()
+        repository.setCalendarSelected(20L, false).getOrThrow()
+        repository.reconcile(setOf(10L)).getOrThrow()
+
+        assertEquals(setOf(10L), repository.reconcile(setOf(10L, 20L)).getOrThrow())
+    }
+
+    @Test
+    fun `calendar removed from active selection is not automatically reselected on return`() {
+        val repository = repository()
+        repository.reconcile(setOf(10L, 20L)).getOrThrow()
+        repository.reconcile(setOf(10L)).getOrThrow()
+
+        assertEquals(setOf(10L), repository.reconcile(setOf(10L, 20L)).getOrThrow())
+        repository.setCalendarSelected(20L, true).getOrThrow()
+        assertEquals(setOf(10L, 20L), repository.reconcile(setOf(10L, 20L)).getOrThrow())
+    }
+
+    @Test
     fun `bulk selection changes only the calendar ids provided for an account`() {
         val repository = repository()
         repository.reconcile(setOf(10L, 20L, 30L)).getOrThrow()

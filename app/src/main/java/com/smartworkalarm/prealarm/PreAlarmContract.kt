@@ -16,4 +16,4 @@ fun preAlarmTriggerAt(now: Instant, occurrenceAt: Instant): Instant? {
     return maxOf(now, occurrenceAt.minusSeconds(PRE_ALARM_LEAD_SECONDS))
 }
 
-private const val PRE_ALARM_LEAD_SECONDS = 10 * 60L
+private const val PRE_ALARM_LEAD_SECONDS = 30 * 60L

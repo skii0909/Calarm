@@ -20,6 +20,50 @@ import org.junit.Test
 
 class RescheduleAlarmsUseCaseTest {
     @Test
+    fun `shift recovery also preserves a just due reservation`() = runTest {
+        val now = Instant.parse("2026-10-05T22:00:30Z")
+        val due = now.minusSeconds(30)
+        val scheduler = ShiftScheduler()
+        val shift = ShiftTypeAlarm(8, 3, "주간", listOf("주간"), 7, 0, 31, true, null, false, true, 5, false)
+        val audit = object : com.smartworkalarm.alarm.AlarmScheduleAuditStore {
+            override fun recordScheduled(key: String, triggerAt: Instant) = Unit
+            override fun recordCancelled(key: String) = Unit
+            override fun read() = com.smartworkalarm.alarm.AlarmScheduleAudit(now, due, 1)
+            override fun nextTriggerFor(key: String) = if (key == "shift:8") due else null
+        }
+        RescheduleAlarmsUseCase(Repository(emptyList()), Scheduler(), CalculateNextOccurrenceUseCase(),
+            ZoneId.of("Asia/Seoul"), ShiftRepository(listOf(shift)), scheduler, audit).execute(now)
+        assertEquals(listOf(8L to due), scheduler.scheduled)
+    }
+
+    @Test
+    fun `recovery preserves a just due reservation instead of moving it to tomorrow`() = runTest {
+        val now = Instant.parse("2026-10-05T22:00:30Z")
+        val due = now.minusSeconds(30)
+        val scheduler = Scheduler()
+        val audit = object : com.smartworkalarm.alarm.AlarmScheduleAuditStore {
+            override fun recordScheduled(key: String, triggerAt: Instant) = Unit
+            override fun recordCancelled(key: String) = Unit
+            override fun read() = com.smartworkalarm.alarm.AlarmScheduleAudit(now, due, 1)
+            override fun nextTriggerFor(key: String) = due
+        }
+        RescheduleAlarmsUseCase(Repository(listOf(Alarm(1, "출근", 7, 0, 31, true, true))), scheduler,
+            CalculateNextOccurrenceUseCase(), ZoneId.of("Asia/Seoul"), ShiftRepository(emptyList()), ShiftScheduler(), audit).execute(now)
+        assertEquals(listOf(1L to due), scheduler.scheduled)
+        assertEquals(null, recentPendingOccurrence(now.minusSeconds(121), now))
+    }
+
+    @Test
+    fun `one scheduling failure must not leave remaining alarms unscheduled`() = runTest {
+        val alarm = Alarm(1, "출근", 7, 0, 31, true, true)
+        val scheduler = Scheduler(failId = 1L)
+        val useCase = RescheduleAlarmsUseCase(Repository(listOf(alarm, alarm.copy(id = 2))), scheduler,
+            CalculateNextOccurrenceUseCase(), ZoneId.of("Asia/Seoul"), ShiftRepository(emptyList()), ShiftScheduler())
+        val result = runCatching { useCase.execute(Instant.parse("2026-08-19T20:00:00Z")) }
+        assertEquals(listOf(2L), scheduler.scheduled.map { it.first })
+        assertEquals(true, result.isFailure)
+    }
+    @Test
     fun `only enabled repository alarms receive schedules`() = runTest {
         val enabled = Alarm(1, "출근", 7, 0, 31, true, true)
         val disabled = enabled.copy(id = 2, enabled = false)
@@ -71,9 +115,10 @@ class RescheduleAlarmsUseCaseTest {
         override suspend fun setEnabled(id: Long, enabled: Boolean) = Unit
     }
 
-    private class Scheduler : AlarmScheduler {
+    private class Scheduler(private val failId: Long? = null) : AlarmScheduler {
         val scheduled = mutableListOf<Pair<Long, Instant>>()
         override fun schedule(alarmId: Long, triggerAt: Instant): ScheduleResult {
+            if (alarmId == failId) error("platform rejected alarm")
             scheduled += alarmId to triggerAt
             return ScheduleResult.Scheduled
         }

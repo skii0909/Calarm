@@ -47,6 +47,36 @@ class ShiftGroupEditViewModelTest {
     @Before fun setUp() = Dispatchers.setMain(dispatcher)
     @After fun tearDown() = Dispatchers.resetMain()
 
+    @Test fun `shift scheduling failure stays editable and exposes a save error`() = runTest(dispatcher) {
+        val scheduler = object : ShiftAlarmScheduler by NoOpShiftScheduler {
+            override fun scheduleShift(shiftTypeId: Long, triggerAt: Instant) = ScheduleResult.ExactAlarmPermissionRequired
+        }
+        val viewModel = viewModel(FakeShiftRepository(groupWithTypes()), scheduler = scheduler)
+        viewModel.loadShiftType(10, 1)
+        advanceUntilIdle()
+        viewModel.onShiftTimeChanged(9, 0)
+        viewModel.saveShiftType()
+        advanceUntilIdle()
+        assertFalse(viewModel.shiftTypeState.value.saved)
+        assertTrue(viewModel.shiftTypeState.value.hasUnsavedChanges)
+        assertTrue(viewModel.shiftTypeState.value.saveError?.contains("권한") == true)
+    }
+
+    @Test fun `group scheduling failure exposes a save error instead of closing editor`() = runTest(dispatcher) {
+        val scheduler = object : ShiftAlarmScheduler by NoOpShiftScheduler {
+            override fun scheduleShift(shiftTypeId: Long, triggerAt: Instant) = ScheduleResult.ExactAlarmPermissionRequired
+        }
+        val viewModel = viewModel(FakeShiftRepository(groupWithTypes()), scheduler = scheduler)
+        viewModel.loadGroup(10)
+        advanceUntilIdle()
+        viewModel.onEmergencyShiftTypeChanged(1)
+        viewModel.saveGroup()
+        advanceUntilIdle()
+        assertFalse(viewModel.state.value.saved)
+        assertTrue(viewModel.state.value.hasUnsavedChanges)
+        assertTrue(viewModel.state.value.saveError?.contains("권한") == true)
+    }
+
     @Test
     fun `completed group requires a nonblank name and two shift types`() = runTest(dispatcher) {
         val repository = FakeShiftRepository(groupWithTypes(types = listOf(type(1, "주간", listOf("주간")))))
@@ -465,9 +495,10 @@ class ShiftGroupEditViewModelTest {
         repository: FakeShiftRepository,
         source: CalendarEventSource = eventSource(Result.success(emptyList())),
         connection: CalendarConnectionState = CalendarConnectionState(false, emptyList()),
+        scheduler: ShiftAlarmScheduler = NoOpShiftScheduler,
     ) = ShiftGroupEditViewModel(
         repository,
-        ReconcileShiftAlarmsUseCase(repository, NoOpShiftScheduler, CalculateNextOccurrenceUseCase(), clock, zoneId),
+        ReconcileShiftAlarmsUseCase(repository, scheduler, CalculateNextOccurrenceUseCase(), clock, zoneId),
         source,
         EvaluateShiftGroupDayUseCase(ShiftDayEvaluator(), KoreanPublicHolidayProvider()),
         clock,

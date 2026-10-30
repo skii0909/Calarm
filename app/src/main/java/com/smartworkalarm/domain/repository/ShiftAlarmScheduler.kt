@@ -10,4 +10,5 @@ interface ShiftAlarmScheduler {
         scheduledOccurrenceAt: Instant,
     ): ScheduleResult
     fun cancelShift(shiftTypeId: Long)
+    fun cancelShiftSnooze(shiftTypeId: Long) = Unit
 }

@@ -8,6 +8,18 @@ import org.junit.Test
 
 class AlarmScheduleAuditStoreTest {
     @Test
+    fun `handled occurrence clears old audit but preserves newer reservation`() {
+        val store = SharedPreferencesAlarmScheduleAuditStore(InMemorySharedPreferences())
+        val occurrence = Instant.parse("2026-10-06T07:00:00Z")
+        store.recordScheduled("regular:1", occurrence)
+        store.recordHandled("regular:1", occurrence)
+        assertEquals(null, store.nextTriggerFor("regular:1"))
+        val tomorrow = occurrence.plusSeconds(86_400)
+        store.recordScheduled("regular:1", tomorrow)
+        store.recordHandled("regular:1", occurrence)
+        assertEquals(tomorrow, store.nextTriggerFor("regular:1"))
+    }
+    @Test
     fun `audit persistence failure does not turn a scheduled alarm into an app failure`() {
         recordAuditSafely { error("disk full") }
     }

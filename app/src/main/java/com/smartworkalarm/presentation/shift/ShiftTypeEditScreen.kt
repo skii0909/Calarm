@@ -1,5 +1,13 @@
 package com.smartworkalarm.presentation.shift
 
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -30,6 +38,7 @@ import com.smartworkalarm.presentation.alarmedit.readableTextFieldColors
 import com.smartworkalarm.presentation.components.DayToggle
 import com.smartworkalarm.presentation.components.GradientHero
 import com.smartworkalarm.presentation.components.NightPulseSection
+import com.smartworkalarm.presentation.components.EditorScreenHeader
 import com.smartworkalarm.presentation.components.PersistentSaveScaffold
 import com.smartworkalarm.presentation.components.UnsavedChangesBackHandler
 
@@ -67,6 +76,7 @@ fun ShiftTypeEditScreen(
     )
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun ShiftTypeEditScreen(
     state: ShiftTypeEditState,
@@ -88,10 +98,11 @@ fun ShiftTypeEditScreen(
         saveLabel = "근무 형태 저장",
         onSave = onSave,
     ) {
-        Text(if (state.id == 0L) "근무 형태 추가" else "근무 형태 편집", style = MaterialTheme.typography.headlineSmall)
+        EditorScreenHeader(if (state.id == 0L) "근무 형태 추가" else "근무 형태 편집", "근무 일정에 맞춰 하루를 준비해요.")
         state.loadError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+        state.saveError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         GradientHero {
-            Text("알람 시간", color = androidx.compose.ui.graphics.Color.White.copy(alpha = .75f))
+            Text("알람 시간", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
             AlarmTimePickerField(state.hour, state.minute, onTimeChanged, hero = true)
         }
         NightPulseSection("근무 형태 정보", "캘린더 제목 전체가 별칭과 같을 때 이 알람이 선택됩니다") {
@@ -118,9 +129,9 @@ fun ShiftTypeEditScreen(
                 colors = readableTextFieldColors(),
             )
             Text("반복 요일", style = MaterialTheme.typography.labelLarge)
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 RepeatDay.entries.forEach { day ->
-                    DayToggle(dayLabel(day), state.repeatDaysMask and day.bit != 0) { onToggleDay(day) }
+                    DayToggle(dayLabel(day), state.repeatDaysMask and day.bit != 0, modifier = Modifier.size(48.dp)) { onToggleDay(day) }
                 }
             }
             state.repeatDaysError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
@@ -174,9 +185,9 @@ private fun ShiftSnoozeSettings(
     }
     if (snoozeEnabled) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.End) {
-            OutlinedButton(onClick = { onSnoozeChanged(snoozeMinutes - 1) }, enabled = snoozeMinutes > 5) { Text("−") }
+            OutlinedButton(onClick = { onSnoozeChanged(snoozeMinutes - 1) }, enabled = snoozeMinutes > 5, modifier = Modifier.semantics { contentDescription = "다시 울림 간격 1분 줄이기" }) { Text("−") }
             Text("${snoozeMinutes}분", modifier = Modifier.padding(horizontal = 12.dp), style = MaterialTheme.typography.titleMedium)
-            OutlinedButton(onClick = { onSnoozeChanged(snoozeMinutes + 1) }, enabled = snoozeMinutes < 30) { Text("+") }
+            OutlinedButton(onClick = { onSnoozeChanged(snoozeMinutes + 1) }, enabled = snoozeMinutes < 30, modifier = Modifier.semantics { contentDescription = "다시 울림 간격 1분 늘리기" }) { Text("+") }
         }
     }
 }

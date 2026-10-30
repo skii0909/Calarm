@@ -16,6 +16,7 @@ data class Alarm(
     val gradualVolume: Boolean = false,
     val snoozeEnabled: Boolean = true,
     val snoozeMinutes: Int = 5,
+    val calendarKeywordExactMatch: Boolean = false,
 ) {
     fun repeatsOn(dayOfWeek: DayOfWeek): Boolean {
         val bit = 1 shl (dayOfWeek.value - 1)

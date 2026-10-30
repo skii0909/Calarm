@@ -19,6 +19,11 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.smartworkalarm.permissions.RequiredPermission
 import com.smartworkalarm.permissions.AlarmDiagnosticKind
+import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
+import androidx.compose.ui.platform.LocalContext
+import com.smartworkalarm.outlook.OutlookViewModel
 
 data class PermissionUiState(
     val permission: RequiredPermission,
@@ -33,11 +38,15 @@ fun SettingsRoute(
     onBatteryOptimizationAction: () -> Unit,
     onCalendarConnectionChanged: () -> Unit,
     viewModel: SettingsViewModel = hiltViewModel(),
+    outlookViewModel: OutlookViewModel = hiltViewModel(),
 ) {
     val lifecycleOwner = LocalLifecycleOwner.current
     val state by viewModel.state.collectAsState()
+    val outlookState by outlookViewModel.state.collectAsState()
+    val activity = LocalContext.current.findActivity()
     val permissions = permissionUiStates(Build.VERSION.SDK_INT, missingRequiredPermissions)
     val snackbarHostState = remember { SnackbarHostState() }
+    LaunchedEffect(outlookState.connection) { onCalendarConnectionChanged() }
 
     fun refresh() {
         viewModel.refresh()
@@ -70,7 +79,8 @@ fun SettingsRoute(
                     AlarmDiagnosticKind.EXACT_ALARM -> onPermissionAction(RequiredPermission.EXACT_ALARM)
                     AlarmDiagnosticKind.FULL_SCREEN -> onPermissionAction(RequiredPermission.FULL_SCREEN_ALARM)
                     AlarmDiagnosticKind.BATTERY -> onBatteryOptimizationAction()
-                    AlarmDiagnosticKind.SCHEDULE -> Unit
+                    AlarmDiagnosticKind.SCHEDULE,
+                    AlarmDiagnosticKind.EXECUTION_HISTORY -> Unit
                 }
             },
             onSetCalendarSelected = { calendarId, selected ->
@@ -82,12 +92,25 @@ fun SettingsRoute(
                 onCalendarConnectionChanged()
             },
             onBack = onBack,
+            outlookContent = {
+                OutlookConnectionCard(outlookState,
+                    onConnect = { activity?.let(outlookViewModel::connect) },
+                    onRefresh = outlookViewModel::refresh,
+                    onDisconnect = outlookViewModel::disconnect,
+                    onSelect = outlookViewModel::select)
+            },
         )
         SnackbarHost(
             hostState = snackbarHostState,
             modifier = Modifier.align(Alignment.BottomCenter),
         )
     }
+}
+
+private fun Context.findActivity(): Activity? = when (this) {
+    is Activity -> this
+    is ContextWrapper -> baseContext.findActivity()
+    else -> null
 }
 
 internal fun permissionUiStates(

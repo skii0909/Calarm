@@ -1,0 +1,16 @@
+Calarm 1.11.1 - calendar date fix - 2026-10-06 (Asia/Seoul)
+
+User incident: regular morning alarm did not ring on October 6. User confirmed public-holiday exclusion enabled and October 5 substitute public holiday present in selected Google calendar. No physical device connected; installed version recalled as latest Outlook integration APK.
+
+Reproduced defect: CalendarContractEventSource used all-day UTC-encoded start/end values as local instants. October 5 all-day holiday ends at October 6 09:00 KST, so the local October 6 query included it. ShouldRingAlarmUseCase returned SKIP_FOR_VACATION; PreAlarmEligibility shares this decision. Existing code does not retain per-execution outcome history; handset execution path remains unobserved.
+
+Fix: pad provider query by one day on each side, normalize all-day UTC dates to local midnight, then filter strict half-open overlap. Timed event instants unchanged. Existing alarm data and selection preferences unchanged.
+
+Evidence: regression test failed before fix and passed after fix. Tests cover actual October 6 decision, Seoul/Los Angeles DST/Kiritimati, adjacent days, multi-day events, timed events, local midnight and short queries. Full unit suite: 374 tests, zero failures/errors/skips. lintDebug: 0 errors, 51 warnings. assembleDebug successful. Scoped independent review: no important findings. No new physical-device or live Microsoft authentication test performed.
+
+APK: Calarm-v1.11.1-calendar-date-fix-debug.apk
+Package: com.smartworkalarm; versionCode: 19; versionName: 1.11.1.
+SHA256: 6A2A25B86CE4B6FBF235CABB70FD6D640AE9E349131865001AFD26A4109731BE
+Signing certificate SHA256 matches existing v1.11.0 APK: 7e8d05700bb80ed9aa7c1755aa28a5936dbd4a31f606f43793e1942b0587dfb5
+Install as an update without uninstalling. Microsoft client ID remains unconfigured as before.
+Android storage contract: https://developer.android.com/reference/android/provider/CalendarContract.Events

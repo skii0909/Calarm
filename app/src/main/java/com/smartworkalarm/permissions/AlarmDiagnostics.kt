@@ -9,6 +9,7 @@ import android.os.Build
 import android.os.PowerManager
 import androidx.core.content.ContextCompat
 import androidx.annotation.RequiresApi
+import com.smartworkalarm.alarm.AlarmExecutionJournal
 import com.smartworkalarm.alarm.AlarmScheduleAudit
 import com.smartworkalarm.alarm.AlarmScheduleAuditStore
 import java.time.Clock
@@ -29,6 +30,7 @@ enum class AlarmDiagnosticKind {
     FULL_SCREEN,
     BATTERY,
     SCHEDULE,
+    EXECUTION_HISTORY,
 }
 
 data class AlarmDiagnosticItem(
@@ -49,6 +51,7 @@ class AndroidAlarmDiagnosticsSource @Inject constructor(
     @param:ApplicationContext private val context: Context,
     private val auditStore: AlarmScheduleAuditStore,
     private val clock: Clock,
+    private val executionJournal: AlarmExecutionJournal,
 ) : AlarmDiagnosticsSource {
     override fun read(): List<AlarmDiagnosticItem> {
         val sdk = Build.VERSION.SDK_INT
@@ -68,6 +71,10 @@ class AndroidAlarmDiagnosticsSource @Inject constructor(
             batteryOptimizationIgnored = batteryIgnored,
             audit = auditStore.read(),
             now = clock.instant(),
+        ) + AlarmDiagnosticItem(
+            AlarmDiagnosticKind.EXECUTION_HISTORY,
+            DiagnosticStatus.NOT_APPLICABLE,
+            executionJournal.readSummary(),
         )
     }
 

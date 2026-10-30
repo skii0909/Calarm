@@ -43,7 +43,7 @@ class EvaluateShiftGroupDayUseCase @Inject constructor(
         if (events.any { CalendarKeywordMatcher.matches(it.title, listOf("휴가")) }) {
             return ShiftGroupDayStatus.Vacation
         }
-        val effectiveTypes = if (events.any { CalendarHolidayMatcher.matches(it.title) }) {
+        val effectiveTypes = if (events.any { CalendarHolidayMatcher.matches(it) }) {
             repeatingTypes.filterNot { it.skipOnPublicHoliday }
         } else {
             repeatingTypes

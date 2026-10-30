@@ -25,9 +25,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -44,8 +44,12 @@ import com.smartworkalarm.presentation.shift.shiftStatusText
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.compose.ui.platform.testTag
 
 @Composable
 fun AlarmListScreen(
@@ -58,18 +62,44 @@ fun AlarmListScreen(
     onSettings: () -> Unit,
 ) {
     val alarms by viewModel.alarms.collectAsState()
-    val nextRegular by viewModel.nextRegularAlarm.collectAsState()
+    val schedulingError by viewModel.schedulingError.collectAsState()
+    schedulingError?.let { message ->
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = viewModel::clearSchedulingError,
+            title = { Text("알람 예약 확인") },
+            text = { Text(message) },
+            confirmButton = { androidx.compose.material3.TextButton(onClick = viewModel::clearSchedulingError) { Text("확인") } },
+        )
+    }
+    val upcoming by viewModel.upcoming.collectAsState()
+    val refreshState by viewModel.refreshState.collectAsState()
+    val calculating by viewModel.calculating.collectAsState()
+    val forecastError by viewModel.forecastError.collectAsState()
+    val lastUpdated by viewModel.lastUpdated.collectAsState()
+    val refreshVersion by viewModel.refreshVersion.collectAsState()
     val shiftGroups by shiftViewModel.groups.collectAsState()
-    val nextAlarm = selectNextAlarmCard(nextRegular, shiftGroups.mapNotNull { it.nextAlarm })
+    val owner = LocalLifecycleOwner.current
+    DisposableEffect(owner, viewModel) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) viewModel.recalculate()
+        }
+        owner.lifecycle.addObserver(observer)
+        if (owner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) viewModel.recalculate()
+        onDispose { owner.lifecycle.removeObserver(observer) }
+    }
+    LaunchedEffect(refreshVersion) { shiftViewModel.refresh() }
 
     AlarmListScaffold(
         alarms = alarms,
         shiftGroups = shiftGroups,
-        nextAlarm = nextAlarm,
-        onRefresh = {
-            viewModel.refresh()
-            shiftViewModel.refresh()
+        upcoming = upcoming,
+        refreshing = refreshState.refreshing || calculating,
+        statusMessage = forecastError ?: when {
+            refreshState.refreshing -> "캘린더 동기화 중…"
+            calculating -> "공휴일·휴무·키워드 확인 중…"
+            else -> listOfNotNull(lastUpdated?.let { "마지막 확인 ${DateTimeFormatter.ofPattern("HH:mm:ss").format(it.atZone(ZoneId.systemDefault()))}" }, refreshState.message.takeIf { it.isNotBlank() }).joinToString("\n")
         },
+        onRefresh = viewModel::refresh,
         onAdd = onAdd,
         onEdit = onEdit,
         onAddShiftGroup = onAddShiftGroup,
@@ -81,10 +111,12 @@ fun AlarmListScreen(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun AlarmListScaffold(
+internal fun AlarmListScaffold(
     alarms: List<Alarm>,
     shiftGroups: List<ShiftGroupListItem>,
-    nextAlarm: NextAlarmCardItem?,
+    upcoming: UpcomingAlarms,
+    refreshing: Boolean,
+    statusMessage: String,
     onRefresh: () -> Unit,
     onAdd: () -> Unit,
     onEdit: (Long) -> Unit,
@@ -93,163 +125,217 @@ private fun AlarmListScaffold(
     onSettings: () -> Unit,
     onEnabled: (Long, Boolean) -> Unit,
 ) {
-    var refreshing by remember { mutableStateOf(false) }
-    val scope = rememberCoroutineScope()
+    val colors = MaterialTheme.colorScheme
+    var showSyncDetails by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+    val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
     Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
-        floatingActionButton = {
-            FloatingActionButton(onClick = onAdd, containerColor = MaterialTheme.colorScheme.primary) {
-                Text("＋", fontSize = 26.sp)
+        containerColor = colors.background,
+        bottomBar = {
+            androidx.compose.material3.Surface(color = colors.background) {
+                Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp)) {
+                    Button(onClick = onAdd, modifier = Modifier.fillMaxWidth().height(54.dp), shape = MaterialTheme.shapes.large) {
+                        Text("＋", fontSize = 24.sp, modifier = Modifier.padding(end = 10.dp))
+                        Text("새 알람", style = MaterialTheme.typography.titleMedium)
+                    }
+                }
             }
         },
     ) { padding ->
         PullToRefreshBox(
             isRefreshing = refreshing,
-            onRefresh = {
-                refreshing = true
-                onRefresh()
-                scope.launch {
-                    delay(450)
-                    refreshing = false
-                }
-            },
+            onRefresh = { haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove); onRefresh() },
             modifier = Modifier.fillMaxSize().padding(padding),
         ) {
             LazyColumn(
-                modifier = Modifier.fillMaxSize().padding(horizontal = 18.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.fillMaxSize().testTag("alarm-list"),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 20.dp, vertical = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
-            item {
-                Row(Modifier.fillMaxWidth().padding(top = 10.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("Calarm", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.secondary)
-                        Text("내 알람", style = MaterialTheme.typography.headlineMedium)
-                    }
-                    Button(onClick = onSettings, shape = MaterialTheme.shapes.extraLarge) { Text("도움말 · 설정") }
-                }
-            }
-            nextAlarm?.let { next ->
                 item {
-                    GradientHero {
-                        Text("NEXT ALARM", style = MaterialTheme.typography.labelLarge, color = Color.White.copy(alpha = .75f))
-                        val zoned = next.triggerAt.atZone(ZoneId.systemDefault())
-                        Text("%02d:%02d".format(zoned.hour, zoned.minute), style = MaterialTheme.typography.displayMedium, color = Color.White)
-                        Text(next.name, style = MaterialTheme.typography.titleLarge, color = Color.White)
-                        Text(
-                            DateTimeFormatter.ofPattern("M월 d일 (E) · ", Locale.KOREAN).format(zoned) +
-                                if (next.isShift) "교대 알람" else "일반 알람",
-                            color = Color.White.copy(alpha = .85f),
-                        )
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text("CALARM", style = MaterialTheme.typography.labelMedium, color = colors.primary, letterSpacing = 3.sp)
+                            Text("내 알람", style = MaterialTheme.typography.headlineLarge, modifier = Modifier.padding(top = 4.dp))
+                        }
+                        androidx.compose.material3.TextButton(onClick = onSettings) { Text("설정", color = colors.onSurfaceVariant) }
                     }
                 }
-            }
-            item {
-                Row(
-                    Modifier.fillMaxWidth().padding(top = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Column(Modifier.weight(1f)) {
-                        Text("교대 알람 그룹", style = MaterialTheme.typography.titleLarge)
-                        Text("캘린더 근무 형태에 맞는 알람 하나를 적용합니다", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                upcoming.items.firstOrNull()?.let { next ->
+                    item {
+                        NextAlarmHero(next) {
+                            if (next.isShift) shiftGroups.firstOrNull { group -> group.shiftTypes.any { it.id == next.id } }?.let { onEditShiftGroup(it.group.id) }
+                            else onEdit(next.id)
+                        }
                     }
-                    Button(onClick = onAddShiftGroup) { Text("＋ 그룹") }
                 }
-            }
-            if (shiftGroups.isEmpty()) item {
-                Card(Modifier.fillMaxWidth()) {
-                    Text("교대 근무가 있다면 그룹을 만들고 근무 형태를 2개 이상 추가하세요.", Modifier.padding(16.dp))
+                if (upcoming.items.size > 1) item { FollowingAlarms(upcoming.items.drop(1).take(3)) }
+                item {
+                    Column {
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            androidx.compose.foundation.Canvas(Modifier.size(6.dp)) { drawCircle(if (upcoming.calendarReadFailed) colors.error else colors.primary) }
+                            Text(if (refreshing) "일정 확인 중" else statusMessage.lineSequence().firstOrNull().orEmpty().ifBlank { "일정 확인" },
+                                Modifier.weight(1f).padding(start = 8.dp), style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
+                            androidx.compose.material3.TextButton(onClick = { showSyncDetails = !showSyncDetails }) { Text(if (showSyncDetails) "접기" else "상세", style = MaterialTheme.typography.labelSmall) }
+                        }
+                        if (upcoming.calendarReadFailed) Text("캘린더 확인 필요 · 일반 알람은 조회 실패 시 울림을 우선합니다.", style = MaterialTheme.typography.bodySmall, color = colors.error)
+                        if (showSyncDetails) {
+                            Text(statusMessage, style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
+                            Text("앞으로 30일의 공휴일·휴무·제외 키워드를 반영합니다. 일정이 바뀌면 예정 시각도 달라집니다.", style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant, modifier = Modifier.padding(top = 6.dp))
+                            androidx.compose.material3.TextButton(onClick = onRefresh, enabled = !refreshing) { Text("지금 새로고침") }
+                        }
+                    }
                 }
-            }
-            items(shiftGroups, key = { "shift-${it.group.id}" }) { item ->
-                ShiftGroupRow(item) { onEditShiftGroup(item.group.id) }
-            }
-            item {
-                Text("일반 알람", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 14.dp))
-                Text("교대 그룹과 별도로 항상 독립적으로 동작합니다", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            if (alarms.isEmpty()) item {
-                GradientHero {
-                    Text("좋은 아침을 준비해 볼까요?", style = MaterialTheme.typography.headlineSmall, color = Color.White)
-                    Text("＋ 버튼을 눌러 첫 출근 알람을 만들어 보세요.", color = Color.White.copy(alpha = .8f))
+                if (upcoming.items.isEmpty() && alarms.any { it.enabled }) item {
+                    Text(if (refreshing) "다음 알람을 확인하고 있어요." else "앞으로 30일 안에 울릴 알람이 없습니다.", style = MaterialTheme.typography.bodyMedium, color = colors.onSurfaceVariant)
                 }
+                item { HomeSectionHeading("일반 알람", "${alarms.count { it.enabled }}개 켜짐") }
+                if (alarms.isEmpty()) item {
+                    androidx.compose.material3.Surface(shape = MaterialTheme.shapes.large, color = colors.surface) {
+                        Column(Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text("나에게 맞는 아침을 시작하세요", style = MaterialTheme.typography.titleMedium)
+                            Text("시간과 요일을 정하면, 쉬는 날은 알아서 건너뜁니다.", style = MaterialTheme.typography.bodyMedium, color = colors.onSurfaceVariant)
+                        }
+                    }
+                }
+                items(alarms, key = { "regular-${it.id}" }) { alarm -> AlarmRow(alarm, onEdit, onEnabled) }
+                item {
+                    Row(Modifier.fillMaxWidth().padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text("교대 알람", style = MaterialTheme.typography.titleLarge)
+                            Text("캘린더의 근무에 맞춰 울려요", style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
+                        }
+                        androidx.compose.material3.TextButton(onClick = onAddShiftGroup) { Text("그룹 추가") }
+                    }
+                }
+                if (shiftGroups.isEmpty()) item {
+                    androidx.compose.material3.Surface(onClick = onAddShiftGroup, shape = MaterialTheme.shapes.large, color = colors.surface,
+                        border = androidx.compose.foundation.BorderStroke(1.dp, colors.outlineVariant)) {
+                        Row(Modifier.padding(20.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) {
+                                Text("근무표에 맞춘 알람", style = MaterialTheme.typography.titleMedium)
+                                Text("주간·야간처럼 근무 형태를 묶어 관리하세요.", style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
+                            }
+                            Text("→", color = colors.primary, fontSize = 24.sp, modifier = Modifier.padding(start = 12.dp))
+                        }
+                    }
+                }
+                items(shiftGroups, key = { "shift-${it.group.id}" }) { item -> ShiftGroupRow(item) { onEditShiftGroup(item.group.id) } }
+                item { Spacer(Modifier.height(8.dp)) }
             }
-            items(alarms, key = { it.id }) { alarm ->
-                AlarmRow(alarm, onEdit, onEnabled)
-            }
-            item { Spacer(Modifier.height(88.dp)) }
         }
+    }
+}
+
+@Composable
+private fun HomeSectionHeading(title: String, detail: String) {
+    Row(Modifier.fillMaxWidth().padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(title, style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
+        Text(detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+@Composable
+private fun NextAlarmHero(next: NextAlarmCardItem, onEdit: () -> Unit) {
+    val colors = MaterialTheme.colorScheme
+    val time = next.triggerAt.atZone(ZoneId.systemDefault())
+    androidx.compose.material3.Surface(onClick = onEdit, shape = androidx.compose.foundation.shape.RoundedCornerShape(28.dp),
+        color = colors.inverseSurface, contentColor = colors.inverseOnSurface) {
+        Column(Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text("NEXT ALARM", style = MaterialTheme.typography.labelSmall, letterSpacing = 1.5.sp, modifier = Modifier.weight(1f))
+                Text(if (next.isShift) "교대 알람" else "일반 알람", style = MaterialTheme.typography.labelSmall)
+            }
+            androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxWidth()) {
+                val scale = androidx.compose.ui.platform.LocalDensity.current.fontScale
+                Text(DateTimeFormatter.ofPattern("HH:mm").format(time), style = MaterialTheme.typography.displayLarge,
+                    fontSize = (maxWidth.value / (3.1f * scale)).coerceAtMost(76f).sp, maxLines = 1,
+                    modifier = Modifier.padding(vertical = 6.dp))
+            }
+            Text(next.name, style = MaterialTheme.typography.titleLarge)
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text(DateTimeFormatter.ofPattern("M월 d일 E요일", Locale.KOREAN).format(time), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                Text("편집 ↗", style = MaterialTheme.typography.labelSmall)
+            }
+            if (next.calendarWarning) Text("캘린더 확인 필요", style = MaterialTheme.typography.bodySmall, color = Color(0xFF8B3A23), modifier = Modifier.padding(top = 6.dp))
+        }
+    }
+}
+
+@Composable
+private fun FollowingAlarms(items: List<NextAlarmCardItem>) {
+    val colors = MaterialTheme.colorScheme
+    androidx.compose.material3.Surface(shape = MaterialTheme.shapes.large, color = colors.surface) {
+        Column(Modifier.padding(horizontal = 20.dp, vertical = 18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            Text("그다음 알람", style = MaterialTheme.typography.labelLarge, color = colors.onSurfaceVariant)
+            items.forEachIndexed { index, next ->
+                if (index > 0) androidx.compose.material3.HorizontalDivider(color = colors.outlineVariant.copy(alpha = .45f))
+                val time = next.triggerAt.atZone(ZoneId.systemDefault())
+                Row(Modifier.fillMaxWidth().testTag("following-alarm-$index"), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(next.name, style = MaterialTheme.typography.titleSmall)
+                        Text(DateTimeFormatter.ofPattern("M.d (E)", Locale.KOREAN).format(time) + if (next.isShift) " · 교대" else " · 일반",
+                            style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
+                        if (next.calendarWarning) Text("캘린더 확인 필요", style = MaterialTheme.typography.bodySmall, color = colors.error)
+                    }
+                    Text(DateTimeFormatter.ofPattern("HH:mm").format(time), style = MaterialTheme.typography.headlineSmall, modifier = Modifier.padding(start = 12.dp))
+                }
+            }
         }
     }
 }
 
 @Composable
 private fun ShiftGroupRow(item: ShiftGroupListItem, onClick: () -> Unit) {
+    val colors = MaterialTheme.colorScheme
     val warning = item.status is com.smartworkalarm.domain.shift.ShiftGroupDayStatus.Conflict ||
         item.status == com.smartworkalarm.domain.shift.ShiftGroupDayStatus.None ||
         item.status is com.smartworkalarm.domain.shift.ShiftGroupDayStatus.ReadFailure
-    Card(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
-        shape = MaterialTheme.shapes.extraLarge,
-        colors = CardDefaults.cardColors(
-            containerColor = if (warning) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.surface,
-        ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-    ) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+    androidx.compose.material3.Surface(onClick = onClick, shape = MaterialTheme.shapes.large, color = colors.surface,
+        border = androidx.compose.foundation.BorderStroke(1.dp, if (warning) colors.error.copy(alpha = .45f) else colors.outlineVariant.copy(alpha = .4f))) {
+        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Text(item.group.name, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-                Switch(checked = item.group.enabled, onCheckedChange = null)
+                FeaturePill(if (item.group.enabled) "사용 중" else "꺼짐")
             }
-            Text("오늘 근무 · ${shiftStatusText(item.status)}", color = MaterialTheme.colorScheme.secondary)
-            Text("내일 근무 · ${shiftStatusText(item.tomorrowStatus)}", color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text(
-                item.nextAlarm?.let {
-                    val time = DateTimeFormatter.ofPattern("MM.dd HH:mm").format(it.triggerAt.atZone(ZoneId.systemDefault()))
-                    "다음 알람 · $time ${it.name}"
-                } ?: "다음 알람 · 없음",
-                style = MaterialTheme.typography.bodyMedium,
-            )
-            val connectionText = calendarConnectionSummary(item.calendarConnection)
-            Text("근무 형태 ${item.shiftTypes.size}개 · $connectionText", style = MaterialTheme.typography.bodySmall)
-            Text(
-                "최근 조회 · ${if (item.lastCalendarQuery.succeeded) "성공" else "실패"}" +
-                    if (warning) " · 캘린더 확인 필요" else "",
-                style = MaterialTheme.typography.bodySmall,
-            )
+            Text("오늘 · ${shiftStatusText(item.status)}", color = if (warning) colors.error else colors.primary, style = MaterialTheme.typography.bodyMedium)
+            Text("내일 · ${shiftStatusText(item.tomorrowStatus)}", color = colors.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+            Text(item.nextAlarm?.let { "다음 알람 · ${DateTimeFormatter.ofPattern("M.d HH:mm").format(it.triggerAt.atZone(ZoneId.systemDefault()))} ${it.name}" } ?: "다음 알람 · 없음", style = MaterialTheme.typography.bodySmall)
+            Text("근무 형태 ${item.shiftTypes.size}개 · ${calendarConnectionSummary(item.calendarConnection)}", style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
+            Text("최근 조회 · ${if (item.lastCalendarQuery.succeeded) "성공" else "실패"}" + if (warning) " · 캘린더 확인 필요" else "",
+                style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
         }
     }
 }
 
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 internal fun AlarmRow(alarm: Alarm, onEdit: (Long) -> Unit, onEnabled: (Long, Boolean) -> Unit) {
-    Card(
-        modifier = Modifier.fillMaxWidth().clickable { onEdit(alarm.id) },
-        shape = MaterialTheme.shapes.extraLarge,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-    ) {
-        Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("%02d:%02d".format(alarm.hour, alarm.minute), style = MaterialTheme.typography.headlineMedium)
-                    Text(alarm.name, modifier = Modifier.padding(bottom = 4.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
+    val colors = MaterialTheme.colorScheme
+    androidx.compose.material3.Surface(onClick = { onEdit(alarm.id) }, shape = MaterialTheme.shapes.large, color = colors.surface,
+        border = androidx.compose.foundation.BorderStroke(1.dp, colors.outlineVariant.copy(alpha = .4f))) {
+        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(alarm.name, style = MaterialTheme.typography.titleSmall, color = colors.onSurfaceVariant)
+                    Text("%02d:%02d".format(alarm.hour, alarm.minute), style = MaterialTheme.typography.displaySmall,
+                        color = if (alarm.enabled) colors.onSurface else colors.onSurfaceVariant)
                 }
-                Text(repeatSummary(alarm.repeatDaysMask), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.secondary)
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    if (alarm.skipOnCalendarMatch) FeaturePill("캘린더")
-                    if (alarm.skipOnPublicHoliday) FeaturePill("공휴일")
-                    if (alarm.gradualVolume) FeaturePill("점점 크게")
-                    if (alarm.snoozeEnabled) FeaturePill("${alarm.snoozeMinutes}분 후")
-                }
+                Switch(checked = alarm.enabled, onCheckedChange = { onEnabled(alarm.id, it) },
+                    modifier = Modifier.semantics { contentDescription = "${alarm.name} 알람 ${if (alarm.enabled) "켜짐" else "꺼짐"}" })
             }
-            Switch(checked = alarm.enabled, onCheckedChange = { onEnabled(alarm.id, it) })
+            Text(repeatSummary(alarm.repeatDaysMask), style = MaterialTheme.typography.bodyMedium, color = if (alarm.enabled) colors.primary else colors.onSurfaceVariant)
+            androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                if (alarm.skipOnCalendarMatch) FeaturePill("일정 제외")
+                if (alarm.skipOnPublicHoliday) FeaturePill("공휴일 제외")
+                if (alarm.gradualVolume) FeaturePill("점점 크게")
+                if (alarm.snoozeEnabled) FeaturePill("다시 울림 ${alarm.snoozeMinutes}분")
+            }
         }
     }
 }
-
-private fun repeatSummary(mask: Int): String = RepeatDay.entries
-    .filter { mask and it.bit != 0 }
-    .joinToString(" ") {
+private fun repeatSummary(mask: Int): String {
+    if (mask == 0) return "한 번만"
+    return RepeatDay.entries.filter { mask and it.bit != 0 }.joinToString(" ") {
         when (it) {
             RepeatDay.MONDAY -> "월"
             RepeatDay.TUESDAY -> "화"
@@ -260,3 +346,4 @@ private fun repeatSummary(mask: Int): String = RepeatDay.entries
             RepeatDay.SUNDAY -> "일"
         }
     }
+}

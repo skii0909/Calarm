@@ -12,6 +12,15 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class ShouldRingAlarmUseCaseTest {
+    @Test
+    fun `same calendar title gives different decisions per alarm match mode`() = runTest {
+        val event = CalendarEvent("오전 휴가", Instant.EPOCH, Instant.EPOCH.plusSeconds(60), true)
+        val evaluator = ShouldRingAlarmUseCase(FakeEventSource(Result.success(listOf(event))))
+        assertEquals(AlarmExecutionDecision.RING,
+            evaluator.execute(alarm().copy(calendarKeywordExactMatch = true), date, zone))
+        assertEquals(AlarmExecutionDecision.SKIP_FOR_VACATION,
+            evaluator.execute(alarm().copy(calendarKeywordExactMatch = false), date, zone))
+    }
     private val date = LocalDate.of(2026, 8, 20)
     private val zone = ZoneId.of("Asia/Seoul")
 
@@ -103,6 +112,24 @@ class ShouldRingAlarmUseCaseTest {
                 zone,
             )
 
+        assertEquals(AlarmExecutionDecision.SKIP_FOR_VACATION, decision)
+    }
+
+    @Test
+    fun `holiday mentions and timed holiday titles cannot suppress a working day`() = runTest {
+        listOf("한글날 행사 준비" to true, "공휴일 근무 회의" to false, "대체공휴일" to false).forEach { (title, allDay) ->
+            val event = CalendarEvent(title, date.atStartOfDay(zone).toInstant(), date.plusDays(1).atStartOfDay(zone).toInstant(), allDay)
+            val decision = ShouldRingAlarmUseCase(FakeEventSource(Result.success(listOf(event))))
+                .execute(alarm().copy(skipOnCalendarMatch = false, skipOnPublicHoliday = true), date, zone)
+            assertEquals(title, AlarmExecutionDecision.RING, decision)
+        }
+    }
+
+    @Test
+    fun `explicit keyword still matches ordinary holiday related event`() = runTest {
+        val event = CalendarEvent("한글날 행사 준비", Instant.EPOCH, Instant.EPOCH.plusSeconds(60), false)
+        val decision = ShouldRingAlarmUseCase(FakeEventSource(Result.success(listOf(event))))
+            .execute(alarm().copy(calendarKeywords = listOf("행사"), skipOnPublicHoliday = true), date, zone)
         assertEquals(AlarmExecutionDecision.SKIP_FOR_VACATION, decision)
     }
 

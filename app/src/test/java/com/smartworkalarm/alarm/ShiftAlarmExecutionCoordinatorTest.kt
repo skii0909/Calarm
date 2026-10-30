@@ -204,7 +204,7 @@ class ShiftAlarmExecutionCoordinatorTest {
 
     @Test
     fun `production calendar policy skips an opted in calendar holiday before a matched shift`() = runTest {
-        val coordinator = productionCoordinator(Result.success(listOf(event("대한민국 임시공휴일"))))
+        val coordinator = productionCoordinator(Result.success(listOf(event("대한민국 임시공휴일").copy(allDay = true))))
 
         assertEquals(ExecutionOutcome.SkippedForVacation, coordinator.execute(night.id, false, now))
     }
@@ -300,6 +300,21 @@ class ShiftAlarmExecutionCoordinatorTest {
         assertEquals(listOf(AlarmKind.SHIFT to night.id), cancellations)
     }
 
+    @Test
+    fun `consumed shift skip with failed rearm leaves no recoverable old audit`() = runTest {
+        var pending: Instant? = now
+        val audit = object : AlarmScheduleAuditStore {
+            override fun recordScheduled(key: String, triggerAt: Instant) { pending = triggerAt }
+            override fun recordCancelled(key: String) { pending = null }
+            override fun nextTriggerFor(key: String) = pending
+            override fun read() = AlarmScheduleAudit(null, pending, if (pending == null) 0 else 1)
+        }
+        val skips = SkipStore().apply { mark(AlarmOccurrenceKey(AlarmKind.SHIFT, night.id, now)) }
+        val coordinator = coordinator(ShiftDayEvaluation.Matched(night.id, night.name),
+            skipStore = skips, audit = audit, onSchedule = { error("rearm failed") })
+        assertEquals(ExecutionOutcome.SkippedByUser, coordinator.execute(night.id, false, now))
+        assertEquals(null, audit.nextTriggerFor("shift:${night.id}"))
+    }
     private fun coordinator(
         result: ShiftDayEvaluation,
         emergencyId: Long? = null,
@@ -309,6 +324,7 @@ class ShiftAlarmExecutionCoordinatorTest {
         onEvaluate: () -> Unit = {},
         onRing: () -> Unit = {},
         skipStore: OccurrenceSkipStore = SkipStore(),
+        audit: AlarmScheduleAuditStore? = null,
         group: ShiftAlarmGroup = ShiftAlarmGroup(10, "교대", true, emergencyId),
         preAlarmNotifications: PreAlarmNotificationCanceller = noOpPreAlarmNotifications(),
     ) = ShiftAlarmExecutionCoordinator(
@@ -323,6 +339,7 @@ class ShiftAlarmExecutionCoordinatorTest {
         ringer = noOpRinger(onRing),
         zoneId = zone,
         skipStore = skipStore,
+        audit = audit,
         preAlarmNotifications = preAlarmNotifications,
     )
 

@@ -17,8 +17,11 @@ class KoreanPublicHolidayProvider @Inject constructor() {
         for (year in FIRST_YEAR..LAST_YEAR) {
             add(result, LocalDate.of(year, 1, 1), "신정")
             add(result, LocalDate.of(year, 3, 1), "삼일절")
+            // Both became national public holidays in 2026 (Act 21543 / Decree 36290).
+            add(result, LocalDate.of(year, 5, 1), "노동절")
             add(result, LocalDate.of(year, 5, 5), "어린이날")
             add(result, LocalDate.of(year, 6, 6), "현충일")
+            add(result, LocalDate.of(year, 7, 17), "제헌절")
             add(result, LocalDate.of(year, 8, 15), "광복절")
             add(result, LocalDate.of(year, 10, 3), "개천절")
             add(result, LocalDate.of(year, 10, 9), "한글날")
@@ -40,8 +43,10 @@ class KoreanPublicHolidayProvider @Inject constructor() {
         for (year in FIRST_YEAR..LAST_YEAR) {
             val eligible = listOf(
                 LocalDate.of(year, 3, 1) to "삼일절",
+                LocalDate.of(year, 5, 1) to "노동절",
                 LocalDate.of(year, 5, 5) to "어린이날",
                 BUDDHA.getValue(year) to "부처님오신날",
+                LocalDate.of(year, 7, 17) to "제헌절",
                 LocalDate.of(year, 8, 15) to "광복절",
                 LocalDate.of(year, 10, 3) to "개천절",
                 LocalDate.of(year, 10, 9) to "한글날",

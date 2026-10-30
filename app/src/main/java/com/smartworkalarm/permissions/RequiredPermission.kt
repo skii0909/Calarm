@@ -23,6 +23,9 @@ enum class RequiredPermission {
     }
 }
 
+fun alarmRequiredPermissions(missing: List<RequiredPermission>): List<RequiredPermission> =
+    missing.filterNot { it == RequiredPermission.CALENDAR }
+
 internal enum class RequiredPermissionAction {
     REQUEST_RUNTIME,
     OPEN_APP_DETAILS,

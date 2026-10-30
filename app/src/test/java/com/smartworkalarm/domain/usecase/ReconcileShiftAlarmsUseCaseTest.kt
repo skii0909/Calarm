@@ -14,6 +14,7 @@ import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ReconcileShiftAlarmsUseCaseTest {
@@ -47,14 +48,14 @@ class ReconcileShiftAlarmsUseCaseTest {
     }
 
     @Test
-    fun `editing time cancels stale pending intent and schedules new occurrence`() = runTest {
+    fun `editing time replaces occurrence without cancelling the existing reservation first`() = runTest {
         val repository = Repository(group(), listOf(type(id = 1, hour = 7)))
         val scheduler = Scheduler()
         val useCase = useCase(repository, scheduler)
 
         useCase.saveShiftType(type(id = 1, hour = 9))
 
-        assertEquals(listOf(1L), scheduler.cancelled)
+        assertEquals(emptyList<Long>(), scheduler.cancelled)
         assertEquals(Instant.parse("2026-08-24T00:00:00Z"), scheduler.scheduled.single().second)
     }
 
@@ -81,13 +82,13 @@ class ReconcileShiftAlarmsUseCaseTest {
     }
 
     @Test
-    fun `enabling group schedules every enabled type after cancelling stale intents`() = runTest {
+    fun `enabling group schedules enabled types and cancels only disabled types`() = runTest {
         val repository = Repository(group(enabled = false), listOf(type(1), type(2, enabled = false)))
         val scheduler = Scheduler()
 
         useCase(repository, scheduler).saveGroup(group(enabled = true))
 
-        assertEquals(listOf(1L, 2L), scheduler.cancelled)
+        assertEquals(listOf(2L), scheduler.cancelled)
         assertEquals(listOf(1L), scheduler.scheduled.map { it.first })
     }
 
@@ -115,6 +116,58 @@ class ReconcileShiftAlarmsUseCaseTest {
         assertEquals(null, repository.getGroupWithTypes(10))
     }
 
+    @Test fun `database save failure leaves existing shift reservation untouched`() = runTest {
+        val original = type(1)
+        val repository = Repository(group(), listOf(original)).apply { failTypeSave = true }
+        val scheduler = Scheduler()
+        assertTrue(runCatching { useCase(repository, scheduler).saveShiftType(original.copy(hour = 9)) }.isFailure)
+        assertEquals(emptyList<Long>(), scheduler.cancelled)
+        assertEquals(emptyList<Pair<Long, Instant>>(), scheduler.scheduled)
+        assertEquals(original, repository.getShiftType(1))
+    }
+
+    @Test fun `permission denied edit restores existing type and reports failure`() = runTest {
+        val original = type(1)
+        val repository = Repository(group(), listOf(original))
+        val scheduler = Scheduler().apply { result = ScheduleResult.ExactAlarmPermissionRequired }
+        assertTrue(runCatching { useCase(repository, scheduler).saveShiftType(original.copy(hour = 9)) }.isFailure)
+        assertEquals(original, repository.getShiftType(1))
+        assertEquals(emptyList<Long>(), scheduler.cancelled)
+    }
+
+    @Test fun `failed new shift reservation does not leave an enabled duplicate on retry`() = runTest {
+        val repository = Repository(group(), emptyList())
+        val scheduler = Scheduler().apply { result = ScheduleResult.ExactAlarmPermissionRequired }
+        assertTrue(runCatching { useCase(repository, scheduler).saveShiftType(type(0)) }.isFailure)
+        assertTrue(repository.types.isEmpty())
+    }
+
+    @Test fun `group scheduling attempts every type after one failure and restores previous group`() = runTest {
+        val original = group(enabled = false)
+        val repository = Repository(original, listOf(type(1), type(2)))
+        val scheduler = Scheduler().apply { failingId = 1 }
+        assertTrue(runCatching { useCase(repository, scheduler).saveGroup(original.copy(enabled = true)) }.isFailure)
+        assertEquals(listOf(1L, 2L), scheduler.attempted)
+        assertEquals(original, repository.group)
+        assertEquals(listOf(1L, 2L), scheduler.cancelled)
+    }
+
+    @Test fun `saving draft group cancels types even if enabled flag is true`() = runTest {
+        val repository = Repository(group(), listOf(type(1), type(2)))
+        val scheduler = Scheduler()
+        useCase(repository, scheduler).saveGroup(group(isDraft = true))
+        assertEquals(listOf(1L, 2L), scheduler.cancelled)
+        assertTrue(scheduler.scheduled.isEmpty())
+    }
+
+    @Test fun `snooze cleanup failure does not roll back a successfully replaced shift`() = runTest {
+        val repository = Repository(group(), listOf(type(1)))
+        val scheduler = Scheduler().apply { failSnoozeCleanup = true }
+        useCase(repository, scheduler).saveShiftType(type(1, hour = 9))
+        assertEquals(9, repository.getShiftType(1)?.hour)
+        assertEquals(Instant.parse("2026-08-24T00:00:00Z"), scheduler.scheduled.single().second)
+    }
+
     private fun useCase(repository: Repository, scheduler: Scheduler) = ReconcileShiftAlarmsUseCase(
         repository,
         scheduler,
@@ -132,11 +185,17 @@ class ReconcileShiftAlarmsUseCaseTest {
     )
 
     private class Scheduler : ShiftAlarmScheduler {
+        var result: ScheduleResult = ScheduleResult.Scheduled
+        var failSnoozeCleanup = false
+        var failingId: Long? = null
+        val attempted = mutableListOf<Long>()
         val cancelled = mutableListOf<Long>()
         val scheduled = mutableListOf<Pair<Long, Instant>>()
         override fun scheduleShift(shiftTypeId: Long, triggerAt: Instant): ScheduleResult {
+            attempted += shiftTypeId
+            if (shiftTypeId == failingId) error("scheduler unavailable")
             scheduled += shiftTypeId to triggerAt
-            return ScheduleResult.Scheduled
+            return result
         }
         override fun scheduleShiftSnooze(
             shiftTypeId: Long,
@@ -144,9 +203,11 @@ class ReconcileShiftAlarmsUseCaseTest {
             scheduledOccurrenceAt: Instant,
         ) = ScheduleResult.Scheduled
         override fun cancelShift(shiftTypeId: Long) { cancelled += shiftTypeId }
+        override fun cancelShiftSnooze(shiftTypeId: Long) { check(!failSnoozeCleanup) { "cleanup unavailable" } }
     }
 
     private class Repository(initialGroup: ShiftAlarmGroup, initialTypes: List<ShiftTypeAlarm>) : ShiftAlarmRepository {
+        var failTypeSave = false
         var group = initialGroup
         var types = initialTypes.toMutableList()
         private var deleted = false
@@ -163,6 +224,7 @@ class ReconcileShiftAlarmsUseCaseTest {
             return group.id
         }
         override suspend fun upsertShiftType(shiftType: ShiftTypeAlarm): Long {
+            check(!failTypeSave) { "database unavailable" }
             val id = if (shiftType.id == 0L) 3L else shiftType.id
             types.removeAll { it.id == id }
             types += shiftType.copy(id = id)

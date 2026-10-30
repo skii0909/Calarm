@@ -84,6 +84,21 @@ class EvaluateShiftGroupDayUseCaseTest {
         assertNull((inactiveEmergency as ShiftGroupDayStatus.ReadFailure).emergencyType)
     }
 
+    @Test
+    fun `holiday related calendar notes do not suppress matching shift`() {
+        val day = type(1, "주간", sundayMask, skipHoliday = true)
+        val aggregate = aggregate(group(), listOf(day))
+        assertEquals(ShiftGroupDayStatus.Matched(day), useCase.execute(aggregate, sunday, events("주간", "한글날 행사 준비")))
+        assertEquals(ShiftGroupDayStatus.Matched(day), useCase.execute(aggregate, sunday, events("주간", "대체공휴일")))
+    }
+
+    @Test
+    fun `all day canonical public holiday suppresses matching opted in shift`() {
+        val day = type(1, "주간", sundayMask, skipHoliday = true)
+        val events = events("주간").getOrThrow() + CalendarEvent("대한민국 임시공휴일", Instant.EPOCH, Instant.EPOCH.plusSeconds(86400), true)
+        assertEquals(ShiftGroupDayStatus.PublicHoliday, useCase.execute(aggregate(group(), listOf(day)), sunday, Result.success(events)))
+    }
+
     private fun group(enabled: Boolean = true, emergencyId: Long? = null) =
         ShiftAlarmGroup(10, "교대", enabled, emergencyId)
 

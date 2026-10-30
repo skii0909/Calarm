@@ -6,7 +6,8 @@ import android.content.Intent
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
-import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.lifecycle.Lifecycle
 import androidx.test.core.app.ActivityScenario
 import androidx.test.core.app.ApplicationProvider
@@ -53,7 +54,7 @@ class AlarmActivityTerminalLifecycleTest {
         alarmTerminalResultStore.clear()
         scenario = ActivityScenario.launch(ringingIntent(context, sessionKey))
 
-        composeRule.onNodeWithContentDescription("알람 해제").performClick()
+        composeRule.onNodeWithContentDescription("알람 해제").performSemanticsAction(SemanticsActions.OnClick)
 
         val terminalCommand = requireNotNull(dispatchedCommand)
         val matchingRequestId = requireNotNull(terminalCommand.terminalRequestId())
@@ -91,6 +92,43 @@ class AlarmActivityTerminalLifecycleTest {
 
         assertEquals(Lifecycle.State.DESTROYED, scenario.state)
         assertEquals(duplicateRejection, alarmTerminalResultStore.take(duplicateRequestId))
+    }
+
+    @Test
+    fun ringingWindowStaysAwakeAfterRecreationAndBackPress() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val sessionKey = RingingSessionKey.create(false, 7L, "keep-screen-on")
+        scenario = ActivityScenario.launch(ringingIntent(context, sessionKey))
+        repeat(2) {
+            scenario.onActivity { activity ->
+                assertTrue(activity.window.attributes.flags and
+                    android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON != 0)
+                activity.onBackPressedDispatcher.onBackPressed()
+                assertTrue(!activity.isFinishing)
+            }
+            if (it == 0) scenario.recreate()
+        }
+    }
+
+    @Test
+    fun notificationDismissDispatchesOnceAcrossRecreation() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val key = RingingSessionKey.create(false, 7L, "notification-action")
+        var dispatchCount = 0
+        originalCommandDispatcher = alarmTerminalCommandDispatcher
+        alarmTerminalCommandDispatcher = { _, command ->
+            assertEquals(AlarmRingingService.ACTION_DISMISS, command.action)
+            assertEquals(key, command.ringingSessionKey())
+            dispatchCount++
+        }
+        scenario = ActivityScenario.launch(ringingIntent(context, key).apply {
+            action = AlarmRingingService.ACTION_DISMISS
+        })
+        composeRule.waitForIdle()
+        assertEquals(1, dispatchCount)
+        scenario.recreate()
+        composeRule.waitForIdle()
+        assertEquals(1, dispatchCount)
     }
 
     private fun ringingIntent(

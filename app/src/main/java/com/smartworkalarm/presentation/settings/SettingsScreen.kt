@@ -1,6 +1,7 @@
 package com.smartworkalarm.presentation.settings
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -27,7 +28,6 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.state.ToggleableState
@@ -38,7 +38,6 @@ import com.smartworkalarm.permissions.AlarmDiagnosticItem
 import com.smartworkalarm.permissions.AlarmDiagnosticKind
 import com.smartworkalarm.permissions.DiagnosticStatus
 import com.smartworkalarm.presentation.components.FeaturePill
-import com.smartworkalarm.presentation.components.GradientHero
 import com.smartworkalarm.presentation.components.NightPulseSection
 
 @Composable
@@ -50,36 +49,34 @@ fun SettingsScreen(
     onSetCalendarSelected: (Long, Boolean) -> Unit,
     onSetAccountSelected: (String, Boolean) -> Unit,
     onBack: () -> Unit,
+    outlookContent: @Composable () -> Unit = {},
 ) {
     Column(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(20.dp),
+            .padding(horizontal = 20.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        GradientHero {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(
-                        "설정과 도움말",
-                        style = MaterialTheme.typography.headlineSmall,
-                        color = Color.White,
-                        fontWeight = FontWeight.Bold,
-                    )
-                    Text(
-                        "권한과 캘린더를 확인하고 알람 동작을 알아보세요.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Color.White.copy(alpha = .88f),
-                    )
-                }
-                TextButton(onClick = onBack) { Text("돌아가기", color = Color.White) }
-            }
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            TextButton(onClick = onBack) { Text("돌아가기") }
+            Spacer(Modifier.weight(1f))
+            Text("CALARM", style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("설정과 도움말", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
+            Text("권한과 캘린더를 확인하고 알람 동작을 알아보세요.",
+                style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        SettingsSectionLabel("01", "캘린더 연결")
+        outlookContent()
+        CalendarCard(
+            state = state,
+            onSetCalendarSelected = onSetCalendarSelected,
+            onSetAccountSelected = onSetAccountSelected,
+        )
+        SettingsSectionLabel("02", "알람 실행 환경")
         PermissionCard(
             permissions = permissions,
             onPermissionAction = onPermissionAction,
@@ -88,15 +85,20 @@ fun SettingsScreen(
             diagnostics = state.diagnostics,
             onAction = onDiagnosticAction,
         )
-        CalendarCard(
-            state = state,
-            onSetCalendarSelected = onSetCalendarSelected,
-            onSetAccountSelected = onSetAccountSelected,
-        )
+        SettingsSectionLabel("03", "Calarm 사용 가이드")
         HELP_SECTIONS.forEach { help ->
             ExpandableHelpCard(help)
         }
         Spacer(Modifier.size(8.dp))
+    }
+}
+
+@Composable
+private fun SettingsSectionLabel(number: String, title: String) {
+    Row(Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 2.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(number, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+        Text(title, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
@@ -115,14 +117,14 @@ private fun AlarmDiagnosticsCard(
         diagnostics.forEachIndexed { index, item ->
             if (index > 0) HorizontalDivider()
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                     Text(item.kind.label, style = MaterialTheme.typography.bodyLarge)
                     Text(
-                        item.status.label,
+                        if (item.kind == AlarmDiagnosticKind.EXECUTION_HISTORY) "최신 기록부터 표시 · 최대 20건" else item.status.label,
                         style = MaterialTheme.typography.labelMedium,
                         color = if (item.status == DiagnosticStatus.ACTION_REQUIRED) {
                             MaterialTheme.colorScheme.error
@@ -151,6 +153,7 @@ private val AlarmDiagnosticKind.label: String
         AlarmDiagnosticKind.FULL_SCREEN -> "잠금화면 전체화면 알람"
         AlarmDiagnosticKind.BATTERY -> "배터리 최적화"
         AlarmDiagnosticKind.SCHEDULE -> "최근 알람 예약"
+        AlarmDiagnosticKind.EXECUTION_HISTORY -> "최근 알람 실행 기록"
     }
 
 private val DiagnosticStatus.label: String
@@ -170,7 +173,7 @@ private fun PermissionCard(
         title = "연결 및 권한",
         subtitle = "알람 실행에 필요한 권한을 한곳에서 확인합니다.",
     ) {
-        if (permissions.all { it.granted }) {
+        if (permissions.filterNot { it.permission == RequiredPermission.CALENDAR }.all { it.granted }) {
             FeaturePill("알람 실행 준비 완료")
         }
         permissions.forEachIndexed { index, permission ->
@@ -189,14 +192,14 @@ private fun PermissionRow(
     onClick: () -> Unit,
 ) {
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
             Text(permission.permission.label, style = MaterialTheme.typography.bodyLarge)
             Text(
-                if (permission.granted) "허용됨" else "필요",
+                if (permission.granted) "허용됨" else if (permission.permission == RequiredPermission.CALENDAR) "Google 연결 시 허용" else "필요",
                 style = MaterialTheme.typography.labelMedium,
                 color = if (permission.granted) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
             )
@@ -229,12 +232,6 @@ private fun CalendarCard(
                 onSetAccountSelected = onSetAccountSelected,
             )
         }
-        HorizontalDivider()
-        Text(
-            "Outlook — 준비 중",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
     }
 }
 
@@ -274,7 +271,8 @@ private fun CalendarAccount(
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(18.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = .55f),
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
     ) {
         Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -335,7 +333,7 @@ private fun CalendarAccount(
 
 private val RequiredPermission.label: String
     get() = when (this) {
-        RequiredPermission.CALENDAR -> "캘린더 읽기"
+        RequiredPermission.CALENDAR -> "Google 캘린더 읽기 (선택)"
         RequiredPermission.NOTIFICATIONS -> "알림"
         RequiredPermission.EXACT_ALARM -> "정확한 알람"
         RequiredPermission.FULL_SCREEN_ALARM -> "전체화면 알람"

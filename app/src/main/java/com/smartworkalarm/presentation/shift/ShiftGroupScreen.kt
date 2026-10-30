@@ -1,6 +1,13 @@
 package com.smartworkalarm.presentation.shift
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -35,6 +42,7 @@ import com.smartworkalarm.presentation.alarmedit.readableTextFieldColors
 import com.smartworkalarm.presentation.components.FeaturePill
 import com.smartworkalarm.presentation.components.GradientHero
 import com.smartworkalarm.presentation.components.NightPulseSection
+import com.smartworkalarm.presentation.components.EditorScreenHeader
 import com.smartworkalarm.presentation.components.PersistentSaveScaffold
 import com.smartworkalarm.presentation.components.UnsavedChangesBackHandler
 import com.smartworkalarm.presentation.calendar.calendarConnectionSummary
@@ -94,11 +102,12 @@ fun ShiftGroupScreen(
         saveLabel = "교대 그룹 저장",
         onSave = onSave,
     ) {
-        Text("교대 알람 그룹", style = MaterialTheme.typography.headlineSmall)
+        EditorScreenHeader("교대 알람 그룹", "일정은 달라도, 시작은 차분하게.")
+        state.saveError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         GradientHero {
-            Text("오늘 근무", color = Color.White.copy(alpha = .75f))
-            Text(shiftStatusText(state.todayStatus), style = MaterialTheme.typography.headlineMedium, color = Color.White)
-            Text(shiftStatusDetail(state.todayStatus, "오늘"), color = Color.White.copy(alpha = .82f))
+            Text("오늘 근무", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(shiftStatusText(state.todayStatus), style = MaterialTheme.typography.headlineMedium, color = MaterialTheme.colorScheme.onSurface)
+            Text(shiftStatusDetail(state.todayStatus, "오늘"), color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         todayCalendarWarning(state.todayStatus)?.let { CalendarWarning(it) }
         Card(Modifier.fillMaxWidth()) {
@@ -186,23 +195,24 @@ fun ShiftGroupScreen(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun ShiftTypeCard(type: ShiftTypeAlarm, onClick: () -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = .55f)),
     ) {
-        Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.fillMaxWidth().padding(18.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                 Text(type.name, style = MaterialTheme.typography.titleMedium)
+                Text("%02d:%02d".format(type.hour, type.minute), style = MaterialTheme.typography.headlineMedium)
                 Text(type.exactTitles.joinToString(" · "), color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    FeaturePill("%02d:%02d".format(type.hour, type.minute))
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     if (type.gradualVolume) FeaturePill("점점 크게")
                     if (type.snoozeEnabled) FeaturePill("${type.snoozeMinutes}분 후")
                 }
             }
-            Text("편집")
+            Text("편집 ›", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
         }
     }
 }

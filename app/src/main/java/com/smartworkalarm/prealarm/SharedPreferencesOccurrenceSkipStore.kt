@@ -8,6 +8,9 @@ class SharedPreferencesOccurrenceSkipStore(
     private val preferences: SharedPreferences,
     private val clock: Clock,
 ) : OccurrenceSkipStore {
+    override fun contains(key: AlarmOccurrenceKey): Boolean = synchronized(LOCK) {
+        key.encode() in readEntries()
+    }
     override fun mark(key: AlarmOccurrenceKey) = synchronized(LOCK) {
         val entries = readEntries().apply { add(key.encode()) }
         persist(retainedEntries(entries, clock.instant()))

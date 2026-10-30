@@ -1,6 +1,11 @@
 package com.smartworkalarm.presentation
 
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.test.onRoot
+import com.smartworkalarm.presentation.theme.WorkAlarmTheme
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -27,15 +32,15 @@ class SettingsScreenTest {
     @Test
     fun showsNightPulseCardsPermissionStatusAndSelectedCount() {
         setSettingsContent()
+        saveScreen("settings-overview.png")
 
-        compose.onNodeWithText("연결 및 권한").assertIsDisplayed()
-        compose.onNodeWithText("캘린더 읽기").assertIsDisplayed()
-        compose.onNodeWithText("허용됨").assertIsDisplayed()
-        compose.onNodeWithText("필요", useUnmergedTree = true).assertIsDisplayed()
+        compose.onNodeWithText("연결 및 권한").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Google 캘린더 읽기 (선택)").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("허용됨").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("필요", useUnmergedTree = true).performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("사용 중인 캘린더").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("me@example.com").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("1/2 선택").performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText("Outlook — 준비 중").performScrollTo().assertIsDisplayed()
     }
 
     @Test
@@ -49,6 +54,7 @@ class SettingsScreenTest {
         compose.onNodeWithText("업무").performScrollTo().assertIsDisplayed()
         compose.onNodeWithContentDescription("개인 선택됨").assertIsDisplayed()
         compose.onNodeWithContentDescription("업무 선택 안 됨").assertIsDisplayed()
+        saveScreen("settings-calendars-expanded.png")
     }
 
     @Test
@@ -56,7 +62,7 @@ class SettingsScreenTest {
         setSettingsContent()
 
         compose.onNodeWithText("일반 알람").performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText("필요할 때만 다시 울림을 사용할 수 있습니다.", substring = true)
+        compose.onNodeWithText("한 번만 울리는 알람과 여러 요일 반복 알람을 만들 수 있습니다.", substring = true)
             .performScrollTo()
             .assertIsDisplayed()
         compose.onNodeWithText("캘린더 자동 건너뛰기").performScrollTo().assertIsDisplayed()
@@ -65,6 +71,7 @@ class SettingsScreenTest {
             .assertIsDisplayed()
         compose.onNodeWithText("교대근무").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("22시 확인").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Outlook 연결").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("공휴일·알람음·다시 울림").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("안전 동작").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Samsung·기기별 설정").performScrollTo().assertIsDisplayed()
@@ -78,6 +85,7 @@ class SettingsScreenTest {
         compose.onNodeWithText("배터리 최적화").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("확인 필요", useUnmergedTree = true).performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("설정하러 가기", useUnmergedTree = true).performScrollTo().assertIsDisplayed()
+        saveScreen("settings-diagnostics.png")
     }
 
     private fun setSettingsContent() {
@@ -91,7 +99,8 @@ class SettingsScreenTest {
         )
         check(account.selection == AccountSelection.PARTIAL)
         compose.setContent {
-            MaterialTheme {
+            WorkAlarmTheme {
+                Surface(color = MaterialTheme.colorScheme.background) {
                 SettingsScreen(
                     state = SettingsUiState(
                         catalogStatus = CalendarCatalogStatus.READY,
@@ -113,7 +122,19 @@ class SettingsScreenTest {
                     onSetAccountSelected = { _, _ -> },
                     onBack = {},
                 )
+                }
             }
+        }
+    }
+
+    private fun saveScreen(name: String) {
+        val directory = androidx.test.platform.app.InstrumentationRegistry.getArguments()
+            .getString("additionalTestOutputDir") ?: return
+        compose.waitForIdle()
+        val bitmap = compose.onRoot().captureToImage().asAndroidBitmap()
+        java.io.File(directory).mkdirs()
+        java.io.File(directory, name).outputStream().use {
+            bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it)
         }
     }
 }

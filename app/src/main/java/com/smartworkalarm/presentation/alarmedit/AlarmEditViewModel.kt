@@ -23,7 +23,8 @@ data class AlarmEditState(
     val repeatDaysMask: Int = 0,
     val enabled: Boolean = true,
     val skipOnCalendarMatch: Boolean = true,
-    val calendarKeywords: String = "휴가",
+    val calendarKeywords: String = "",
+    val calendarKeywordExactMatch: Boolean = false,
     val ringtoneUri: String? = null,
     val skipOnPublicHoliday: Boolean = false,
     val gradualVolume: Boolean = false,
@@ -58,6 +59,7 @@ class AlarmEditViewModel @Inject constructor(
                     enabled = alarm.enabled,
                     skipOnCalendarMatch = alarm.skipOnCalendarMatch,
                     calendarKeywords = alarm.calendarKeywords.joinToString(", "),
+                    calendarKeywordExactMatch = alarm.calendarKeywordExactMatch,
                     ringtoneUri = alarm.ringtoneUri,
                     skipOnPublicHoliday = alarm.skipOnPublicHoliday,
                     gradualVolume = alarm.gradualVolume,
@@ -77,6 +79,7 @@ class AlarmEditViewModel @Inject constructor(
     fun onEnabledChanged(value: Boolean) = updateEditorState { it.copy(enabled = value) }
     fun onSkipOnCalendarMatchChanged(value: Boolean) = updateEditorState { it.copy(skipOnCalendarMatch = value) }
     fun onCalendarKeywordsChanged(value: String) = updateEditorState { it.copy(calendarKeywords = value) }
+    fun onCalendarKeywordExactMatchChanged(value: Boolean) = updateEditorState { it.copy(calendarKeywordExactMatch = value) }
     fun onRingtoneChanged(value: String?) = updateEditorState { it.copy(ringtoneUri = value) }
     fun onSkipOnPublicHolidayChanged(value: Boolean) = updateEditorState { it.copy(skipOnPublicHoliday = value) }
     fun onGradualVolumeChanged(value: Boolean) = updateEditorState { it.copy(gradualVolume = value) }
@@ -90,10 +93,6 @@ class AlarmEditViewModel @Inject constructor(
         val current = _state.value
         if (current.name.isBlank()) {
             _state.update { it.copy(nameError = "알람 이름을 입력하세요") }
-            return
-        }
-        if (current.repeatDaysMask == 0) {
-            _state.update { it.copy(repeatDaysError = "반복 요일을 하나 이상 선택하세요") }
             return
         }
         val payload = current.toAlarm()
@@ -136,6 +135,7 @@ class AlarmEditViewModel @Inject constructor(
         repeatDaysMask = repeatDaysMask,
         enabled = enabled,
         skipOnCalendarMatch = skipOnCalendarMatch,
+        calendarKeywordExactMatch = calendarKeywordExactMatch,
         calendarKeywords = CalendarKeywordMatcher.normalize(calendarKeywords),
         ringtoneUri = ringtoneUri,
         skipOnPublicHoliday = skipOnPublicHoliday,
@@ -154,6 +154,7 @@ private data class AlarmEditableSnapshot(
     val enabled: Boolean,
     val skipOnCalendarMatch: Boolean,
     val calendarKeywords: List<String>,
+    val calendarKeywordExactMatch: Boolean,
     val ringtoneUri: String?,
     val skipOnPublicHoliday: Boolean,
     val gradualVolume: Boolean,
@@ -168,6 +169,7 @@ private fun AlarmEditState.editableSnapshot() = AlarmEditableSnapshot(
     repeatDaysMask = repeatDaysMask,
     enabled = enabled,
     skipOnCalendarMatch = skipOnCalendarMatch,
+    calendarKeywordExactMatch = calendarKeywordExactMatch,
     calendarKeywords = CalendarKeywordMatcher.normalize(calendarKeywords),
     ringtoneUri = ringtoneUri,
     skipOnPublicHoliday = skipOnPublicHoliday,
@@ -183,6 +185,7 @@ private fun Alarm.editableSnapshot() = AlarmEditableSnapshot(
     repeatDaysMask = repeatDaysMask,
     enabled = enabled,
     skipOnCalendarMatch = skipOnCalendarMatch,
+    calendarKeywordExactMatch = calendarKeywordExactMatch,
     calendarKeywords = calendarKeywords,
     ringtoneUri = ringtoneUri,
     skipOnPublicHoliday = skipOnPublicHoliday,

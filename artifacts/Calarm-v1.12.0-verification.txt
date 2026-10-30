@@ -1,0 +1,19 @@
+Calarm 1.12.0 (22) - UI redesign verification - 2026-10-08
+
+Changes: charcoal/ivory/lime theme, redesigned home with next alarm plus 3 following occurrences, fixed add action, redesigned regular/shift editors, settings, onboarding, premium information, and ringing controls. Existing refresh and alarm scheduling rules retained.
+Large-font ringing layout adjusted after screenshot review to prevent dismiss text overlap when an error is visible.
+
+Verification:
+446 unit tests passed (redesign-resume-build.log; subsequent production change is ringing layout only).
+Lint and final APK build passed (redesign-final-layout-build.log). Existing nonblocking lint warnings remain.
+54 presentation/alarm UI tests passed (redesign-ui-recheck.log).
+2 actual scheduled delivery tests passed in the first suite, including unreadable sound fallback (redesign-ui-final.log). That first suite also had test failures corrected in the later 54-test run.
+19 affected ringing/gesture/lifecycle tests passed again after the final layout adjustment (redesign-final-ringing-retry.log).
+Native emulator screenshots reviewed for home, editor, settings, onboarding, and large-font ringing. Editor gallery checks include 320dp width and 2x font scale.
+No physical phone validation in this run. Emulator startup/test runner interruptions occurred; successful completed runs are identified above.
+
+APK: Calarm-v1.12.0-design-debug.apk
+Bytes: 20368304
+SHA256: D48C3E56D19CF39B8C6B3E2C65129FBE4408B8FEF693D0998294DE06577AC130
+Signing certificate SHA256: 7e8d05700bb80ed9aa7c1755aa28a5936dbd4a31f606f43793e1942b0587dfb5
+Signature matches previous delivered APK. Install as an update without uninstalling to retain app data.

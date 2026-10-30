@@ -9,26 +9,26 @@ class PreAlarmPolicyTest {
     private val now = Instant.parse("2026-08-26T00:00:00Z")
 
     @Test
-    fun `occurrence more than ten minutes away triggers ten minutes before`() {
+    fun `occurrence more than thirty minutes away triggers thirty minutes before`() {
         assertEquals(
-            Instant.parse("2026-08-26T00:05:00Z"),
-            preAlarmTriggerAt(now, Instant.parse("2026-08-26T00:15:00Z")),
+            Instant.parse("2026-08-26T00:15:00Z"),
+            preAlarmTriggerAt(now, Instant.parse("2026-08-26T00:45:00Z")),
         )
     }
 
     @Test
-    fun `occurrence exactly ten minutes away triggers now`() {
+    fun `occurrence exactly thirty minutes away triggers now`() {
         assertEquals(
             now,
-            preAlarmTriggerAt(now, Instant.parse("2026-08-26T00:10:00Z")),
+            preAlarmTriggerAt(now, Instant.parse("2026-08-26T00:30:00Z")),
         )
     }
 
     @Test
-    fun `occurrence less than ten minutes away triggers immediately`() {
+    fun `occurrence less than thirty minutes away triggers immediately`() {
         assertEquals(
             now,
-            preAlarmTriggerAt(now, Instant.parse("2026-08-26T00:09:59Z")),
+            preAlarmTriggerAt(now, Instant.parse("2026-08-26T00:29:59Z")),
         )
     }
 

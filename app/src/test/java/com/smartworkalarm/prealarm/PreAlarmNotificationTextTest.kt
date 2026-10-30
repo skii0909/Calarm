@@ -2,21 +2,22 @@ package com.smartworkalarm.prealarm
 
 import org.junit.Assert.assertEquals
 import org.junit.Test
+import java.time.LocalTime
 
 class PreAlarmNotificationTextTest {
     @Test
-    fun `title names the alarm and says it will ring in ten minutes`() {
+    fun `title names the alarm and shows its scheduled time`() {
         assertEquals(
-            "출근 알람이 10분 뒤 울립니다",
-            PreAlarmNotificationText.forAlarm("출근 알람").title,
+            "출근 알람이 07:05에 울립니다",
+            PreAlarmNotificationText.forAlarm("출근", LocalTime.of(7, 5)).title,
         )
     }
 
     @Test
     fun `body asks whether to turn off this occurrence`() {
         assertEquals(
-            "오늘 이 알람을 끌까요?",
-            PreAlarmNotificationText.forAlarm("출근 알람").body,
+            "오늘 이 알림을 끌까요?",
+            PreAlarmNotificationText.forAlarm("출근", LocalTime.of(7, 5)).body,
         )
     }
 

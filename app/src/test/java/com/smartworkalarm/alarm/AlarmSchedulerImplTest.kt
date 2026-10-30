@@ -42,7 +42,7 @@ class AlarmSchedulerImplTest {
         val scheduled = shadowOf(alarmManager).scheduledAlarms
         assertEquals(
             listOf(
-                Instant.parse("2026-08-26T00:20:00Z").toEpochMilli(),
+                now.toEpochMilli(),
                 occurrenceAt.toEpochMilli(),
             ),
             scheduled.map { it.triggerAtMs }.sorted(),
@@ -67,7 +67,7 @@ class AlarmSchedulerImplTest {
         val scheduled = shadowOf(alarmManager).scheduledAlarms
         assertEquals(
             listOf(
-                Instant.parse("2026-08-26T00:20:00Z").toEpochMilli(),
+                now.toEpochMilli(),
                 occurrenceAt.toEpochMilli(),
             ),
             scheduled.map { it.triggerAtMs }.sorted(),
@@ -239,6 +239,21 @@ class AlarmSchedulerImplTest {
         scheduler.cancel(41L)
 
         assertEquals(0, shadowOf(notificationManager).size())
+    }
+
+    @Test
+    fun `unchanged sync preserves the visible prealert for the same occurrence`() {
+        val (notifications, manager) = notifications()
+        val (scheduler, _) = scheduler(notifications)
+        val key = AlarmOccurrenceKey(AlarmKind.REGULAR, 90L, occurrenceAt)
+        scheduler.schedule(key.id, key.scheduledAt)
+        notifications.post(key, "출근")
+        scheduler.schedule(key.id, key.scheduledAt)
+        assertEquals(1, shadowOf(manager).size())
+        notifications.cancel(key)
+        scheduler.schedule(key.id, key.scheduledAt)
+        notifications.post(key, "출근")
+        assertEquals(0, shadowOf(manager).size())
     }
 
     @Test

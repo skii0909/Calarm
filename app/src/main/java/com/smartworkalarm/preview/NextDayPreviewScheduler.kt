@@ -19,13 +19,19 @@ class NextDayPreviewScheduler @Inject constructor(
     private val zoneId: ZoneId,
 ) {
     fun scheduleNext() {
-        val at = calculate.execute(clock.instant(), zoneId).toEpochMilli()
+        val target = calculate.execute(clock.instant(), zoneId)
+        val at = target.toEpochMilli()
         val operation = PendingIntent.getBroadcast(
-            context, REQUEST_CODE, Intent(context, NextDayPreviewReceiver::class.java),
+            context, REQUEST_CODE, Intent(context, NextDayPreviewReceiver::class.java)
+                .putExtra(NextDayPreviewWorker.TARGET_DATE, target.atZone(zoneId).toLocalDate().plusDays(1).toString()),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
         if (Build.VERSION.SDK_INT < 31 || alarmManager.canScheduleExactAlarms()) {
-            alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, operation)
+            try {
+                alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, operation)
+            } catch (_: SecurityException) {
+                alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, operation)
+            }
         } else {
             alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, operation)
         }

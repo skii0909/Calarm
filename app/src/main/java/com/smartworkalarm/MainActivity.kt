@@ -20,9 +20,17 @@ import com.smartworkalarm.presentation.navigation.WorkAlarmNavHost
 import com.smartworkalarm.presentation.permissions.RequiredPermissionsPrompt
 import com.smartworkalarm.presentation.theme.WorkAlarmTheme
 import dagger.hilt.android.AndroidEntryPoint
+import com.smartworkalarm.permissions.alarmRequiredPermissions
+import com.smartworkalarm.outlook.OutlookRuntime
+import javax.inject.Inject
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
+import com.smartworkalarm.presentation.alarmlist.CalendarRefreshController
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
+    @Inject lateinit var outlookRuntime: OutlookRuntime
+    @Inject lateinit var calendarRefresh: CalendarRefreshController
     private val permissionsSession: RequiredPermissionsSessionViewModel by viewModels()
     private lateinit var requiredPermissions: RequiredPermissionsController
     private var missingPermissions by mutableStateOf(emptyList<RequiredPermission>())
@@ -77,9 +85,10 @@ class MainActivity : ComponentActivity() {
                         openPermissionSettings(requiredPermissions.batteryOptimizationIntent())
                     },
                 )
-                if (permissionsSession.state.shouldShow(missingPermissions)) {
+                val alarmPermissions = alarmRequiredPermissions(missingPermissions)
+                if (permissionsSession.state.shouldShow(alarmPermissions)) {
                     RequiredPermissionsPrompt(
-                        missing = missingPermissions,
+                        missing = alarmPermissions,
                         onPermissionAction = ::handlePermissionAction,
                         onLater = permissionsSession::dismissPrompt,
                     )
@@ -91,11 +100,21 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         if (::requiredPermissions.isInitialized) refreshRequiredPermissions()
+        outlookRuntime.start()
+        lifecycleScope.launch { calendarRefresh.refresh() }
+        // Opening after a force-stop or interrupted restore repairs active OS reservations.
+        runCatching {
+            androidx.work.WorkManager.getInstance(this).enqueueUniqueWork(
+                com.smartworkalarm.alarm.SystemChangeReceiver.UNIQUE_WORK_NAME,
+                androidx.work.ExistingWorkPolicy.KEEP,
+                androidx.work.OneTimeWorkRequestBuilder<com.smartworkalarm.worker.RescheduleAlarmsWorker>().build(),
+            )
+        }
     }
 
     private fun refreshRequiredPermissions() {
         missingPermissions = requiredPermissions.missing()
-        permissionsSession.onPermissionsRefreshed(missingPermissions)
+        permissionsSession.onPermissionsRefreshed(alarmRequiredPermissions(missingPermissions))
     }
 
     private fun openPermissionSettings(primary: android.content.Intent?) {

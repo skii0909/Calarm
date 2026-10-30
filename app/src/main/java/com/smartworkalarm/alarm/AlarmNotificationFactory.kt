@@ -46,6 +46,26 @@ class AlarmNotificationFactory @Inject constructor(
             },
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
+        fun terminalAction(action: String): PendingIntent = PendingIntent.getActivity(
+            context,
+            FULL_SCREEN_REQUEST_CODE,
+            Intent(context, AlarmActivity::class.java).apply {
+                this.action = action
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                data = Uri.parse("${fullScreenIntentIdentity(sessionKey)}/$action")
+                putRingingSessionKey(sessionKey)
+                putExtra(AlarmSchedulerImpl.EXTRA_ALARM_ID, alarmId)
+                putExtra(EXTRA_ALARM_NAME, name)
+                putExtra(AlarmRingingService.EXTRA_IS_SHIFT_ALARM, isShiftAlarm)
+                putExtra(AlarmRingingService.EXTRA_CALENDAR_WARNING, calendarWarning)
+                putExtra(AlarmRingingService.EXTRA_SNOOZE_ENABLED, snoozeEnabled)
+                putExtra(AlarmRingingService.EXTRA_SNOOZE_MINUTES, snoozeMinutes.coerceIn(5, 30))
+                scheduledOccurrenceAt?.let {
+                    putExtra(AlarmSchedulerImpl.EXTRA_SCHEDULED_OCCURRENCE_AT, it.toEpochMilli())
+                }
+            },
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
         return NotificationCompat.Builder(context, RingingChannelPolicy.ID)
             .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
             .setContentTitle(name)
@@ -56,6 +76,13 @@ class AlarmNotificationFactory @Inject constructor(
             .setOngoing(true)
             .setContentIntent(fullScreen)
             .setFullScreenIntent(fullScreen, true)
+            .addAction(0, "알람 해제", terminalAction(AlarmRingingService.ACTION_DISMISS))
+            .apply {
+                if (snoozeEnabled) addAction(
+                    0, "${snoozeMinutes.coerceIn(5, 30)}분 후 다시 울림",
+                    terminalAction(AlarmRingingService.ACTION_SNOOZE),
+                )
+            }
             .build()
     }
 

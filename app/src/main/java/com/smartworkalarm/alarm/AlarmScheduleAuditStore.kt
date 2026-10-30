@@ -14,12 +14,28 @@ interface AlarmScheduleAuditStore {
     fun recordScheduled(key: String, triggerAt: Instant)
     fun recordCancelled(key: String)
     fun read(): AlarmScheduleAudit
+    fun nextTriggerFor(key: String): Instant? = null
+    fun recordHandled(key: String, occurrenceAt: Instant) {
+        if (nextTriggerFor(key)?.let { !it.isAfter(occurrenceAt) } == true) recordCancelled(key)
+    }
 }
 
 class SharedPreferencesAlarmScheduleAuditStore(
     private val preferences: SharedPreferences,
     private val clock: Clock = Clock.systemUTC(),
 ) : AlarmScheduleAuditStore {
+    override fun nextTriggerFor(key: String): Instant? = synchronized(LOCK) {
+        readActive()[key]?.let(Instant::ofEpochMilli)
+    }
+    override fun recordHandled(key: String, occurrenceAt: Instant) = synchronized(LOCK) {
+        val active = readActive().toMutableMap()
+        val pending = active[key]
+        if (pending != null && pending <= occurrenceAt.toEpochMilli()) {
+            active.remove(key)
+            persist(active, preferences.getLong(LAST_SUCCESS_EPOCH_MS, NO_TIMESTAMP))
+        }
+    }
+
     override fun recordScheduled(key: String, triggerAt: Instant) = synchronized(LOCK) {
         val active = readActive().toMutableMap().apply { put(key, triggerAt.toEpochMilli()) }
         persist(active, clock.instant().toEpochMilli())

@@ -4,6 +4,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performScrollTo
 import com.smartworkalarm.domain.model.ShiftTypeAlarm
 import com.smartworkalarm.domain.model.CalendarConnectionState
 import com.smartworkalarm.domain.model.ConnectedCalendar
@@ -44,12 +45,12 @@ class ShiftGroupScreenTest {
             }
         }
 
-        compose.onNodeWithText("교대 알람 그룹").assertIsDisplayed()
-        compose.onNodeWithText("오늘 근무").assertIsDisplayed()
-        compose.onNodeWithText("내일 근무").assertIsDisplayed()
-        compose.onNodeWithText("연결된 캘린더 1개").assertIsDisplayed()
-        compose.onNodeWithText("최근 캘린더 조회 · 성공", substring = true).assertIsDisplayed()
-        compose.onNodeWithText("비상 기본 알람").assertIsDisplayed()
+        compose.onNodeWithText("교대 알람 그룹").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("오늘 근무").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("내일 근무").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("연결된 캘린더 1개").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("최근 캘린더 조회 · 성공", substring = true).performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("비상 기본 알람").performScrollTo().assertIsDisplayed()
     }
 
     @Test
@@ -60,8 +61,8 @@ class ShiftGroupScreenTest {
             }
         }
 
-        compose.onNodeWithText("정확히 일치할 캘린더 제목").assertIsDisplayed()
-        compose.onNodeWithText("제목 전체가 일치할 때만 적용됩니다").assertIsDisplayed()
+        compose.onNodeWithText("정확히 일치할 캘린더 제목").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("제목 전체가 일치할 때만 적용됩니다").performScrollTo().assertIsDisplayed()
     }
 
     private fun type() = ShiftTypeAlarm(

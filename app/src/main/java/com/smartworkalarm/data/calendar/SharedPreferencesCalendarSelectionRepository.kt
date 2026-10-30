@@ -17,7 +17,9 @@ class SharedPreferencesCalendarSelectionRepository @Inject constructor(
             val selectedIds = readIds(SELECTED_IDS_KEY)
             val nextSelectedIds = (selectedIds intersect availableCalendarIds) +
                 (availableCalendarIds - knownIds)
-            persist(availableCalendarIds, nextSelectedIds)
+            // Hidden or temporarily unavailable calendars must not return as newly
+            // discovered selections and silently override the user's deselection.
+            persist(knownIds + availableCalendarIds, nextSelectedIds)
             nextSelectedIds
         }
     }

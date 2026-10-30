@@ -8,6 +8,10 @@ plugins {
     alias(libs.plugins.hilt)
 }
 
+val outlookClientId = providers.gradleProperty("outlookClientId").orElse("").get().trim()
+val outlookSignatureHash = providers.gradleProperty("outlookSignatureHash").orElse("").get().trim()
+fun quotedBuildValue(value: String) = "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
+
 android {
     namespace = "com.smartworkalarm"
     compileSdk = 36
@@ -16,12 +20,27 @@ android {
         applicationId = "com.smartworkalarm"
         minSdk = 26
         targetSdk = 36
-        versionCode = 16
-        versionName = "1.10.3"
+        versionCode = 25
+        versionName = "1.12.3"
+        buildConfigField("String", "OUTLOOK_CLIENT_ID", quotedBuildValue(outlookClientId))
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     buildFeatures { compose = true }
+
+    buildFeatures { buildConfig = true }
+    buildTypes {
+        getByName("debug") {
+            val signature = outlookSignatureHash.ifBlank { "aaoXrHFrYrhShsQEbGTUANF+6Ek=" }
+            buildConfigField("String", "OUTLOOK_SIGNATURE_HASH", quotedBuildValue(signature))
+            manifestPlaceholders["outlookSignatureHash"] = signature
+        }
+        getByName("release") {
+            buildConfigField("String", "OUTLOOK_SIGNATURE_HASH", quotedBuildValue(outlookSignatureHash))
+            manifestPlaceholders["outlookSignatureHash"] = outlookSignatureHash.ifBlank { "unconfigured" }
+        }
+    }
+    packaging { resources.excludes += setOf("META-INF/INDEX.LIST", "META-INF/DEPENDENCIES") }
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -44,6 +63,7 @@ ksp {
 }
 
 dependencies {
+    implementation(libs.msal)
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.lifecycle.runtime.ktx)

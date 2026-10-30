@@ -12,6 +12,7 @@ import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -33,6 +34,7 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -51,7 +53,6 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.lerp
@@ -67,6 +68,8 @@ import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -82,14 +85,6 @@ internal const val SNOOZE_HOLD_TAG = "snooze_hold"
 internal const val DISMISS_HANDLE_TAG = "dismiss_handle"
 internal const val ALARM_ACTION_ERROR_TAG = "alarm_action_error"
 
-private val NightTop = Color(0xFF102846)
-private val NightMiddle = Color(0xFF07111F)
-private val NightBottom = Color(0xFF050A12)
-private val AlarmBlue = Color(0xFF4DA3FF)
-private val AlarmMint = Color(0xFF65E0C2)
-private val SecondaryText = Color(0xFFB7C8DD)
-private val WarningText = Color(0xFFFFC76B)
-
 @Composable
 internal fun AlarmRingingScreen(
     presentation: AlarmPresentation,
@@ -101,10 +96,11 @@ internal fun AlarmRingingScreen(
 ) {
     val animationsDisabled = animationsDisabledOverride ?: animationsDisabled()
     val density = LocalDensity.current
+    val colors = MaterialTheme.colorScheme
     BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
-            .background(Brush.verticalGradient(listOf(NightTop, NightMiddle, NightBottom)))
+            .background(Brush.verticalGradient(listOf(colors.surface, colors.background)))
             .windowInsetsPadding(WindowInsets.safeDrawing)
             .padding(horizontal = 24.dp, vertical = 20.dp),
     ) {
@@ -120,22 +116,18 @@ internal fun AlarmRingingScreen(
             presentation.alarmId,
             presentation.scheduledOccurrenceAt,
         ) {
-            Column(
-                modifier = Modifier.fillMaxSize(),
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                AlarmIdentityZone(
-                    presentation = presentation,
-                    modifier = Modifier.weight(if (presentation.snoozeEnabled) 0.82f else 0.72f),
-                )
+            val compact = maxHeight < 620.dp || density.fontScale > 1.3f
+            val actions: @Composable (Modifier) -> Unit = { modifier ->
+                Column(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally) {
                 persistentError?.let { message ->
                     Text(
                         text = message,
-                        color = WarningText,
+                        color = colors.error,
                         textAlign = TextAlign.Center,
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(horizontal = 12.dp, vertical = 6.dp)
+                            .semantics { liveRegion = LiveRegionMode.Polite }
                             .testTag(ALARM_ACTION_ERROR_TAG),
                     )
                 }
@@ -144,7 +136,13 @@ internal fun AlarmRingingScreen(
                         snoozeMinutes = presentation.snoozeMinutes,
                         actionsEnabled = actionsEnabled,
                         onSnooze = onSnooze,
-                        modifier = Modifier.weight(0.48f),
+                        modifier = Modifier.height(
+                            when {
+                                density.fontScale > 1.3f -> 120.dp
+                                compact -> 92.dp
+                                else -> 108.dp
+                            },
+                        ),
                     )
                 }
                 DragToDismissZone(
@@ -153,8 +151,20 @@ internal fun AlarmRingingScreen(
                     dismissFailed = persistentError != null,
                     thresholdPx = dismissThresholdPx,
                     onDismiss = onDismiss,
-                    modifier = Modifier.weight(if (presentation.snoozeEnabled) 1.7f else 2.15f),
+                    modifier = Modifier.weight(1f),
                 )
+                }
+            }
+            if (maxWidth > maxHeight) {
+                Row(Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
+                    AlarmIdentityZone(presentation, compact = true, modifier = Modifier.weight(1f))
+                    actions(Modifier.weight(1f).fillMaxSize().padding(start = 16.dp))
+                }
+            } else {
+                Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
+                    AlarmIdentityZone(presentation, compact, Modifier.weight(if (density.fontScale > 1.3f) 0.75f else 1f))
+                    actions(Modifier.weight(if (presentation.snoozeEnabled) 1.65f else 1.25f))
+                }
             }
         }
     }
@@ -163,8 +173,10 @@ internal fun AlarmRingingScreen(
 @Composable
 private fun AlarmIdentityZone(
     presentation: AlarmPresentation,
+    compact: Boolean,
     modifier: Modifier = Modifier,
 ) {
+    val colors = MaterialTheme.colorScheme
     val timeText = remember {
         LocalTime.now().format(DateTimeFormatter.ofPattern("HH:mm"))
     }
@@ -176,22 +188,34 @@ private fun AlarmIdentityZone(
         verticalArrangement = Arrangement.Center,
     ) {
         Surface(
-            color = AlarmBlue.copy(alpha = 0.16f),
+            color = colors.primary.copy(alpha = 0.10f),
             shape = CircleShape,
         ) {
             Text(
-                text = if (presentation.isShiftAlarm) "근무 알람" else "Calarm",
-                color = if (presentation.isShiftAlarm) AlarmMint else AlarmBlue,
+                text = if (presentation.isShiftAlarm) "근무 알람" else "CALARM",
+                color = colors.primary,
+                fontSize = 12.sp,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.padding(horizontal = 18.dp, vertical = 7.dp),
             )
         }
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(if (compact) 4.dp else 20.dp))
+        Text(
+            text = timeText,
+            color = colors.onSurface,
+            fontSize = if (compact) 48.sp else 82.sp,
+            lineHeight = if (compact) 52.sp else 88.sp,
+            letterSpacing = (-3).sp,
+            fontWeight = FontWeight.Light,
+            maxLines = 1,
+        )
+        Spacer(Modifier.height(if (compact) 4.dp else 16.dp))
         Text(
             text = presentation.alarmName,
-            color = Color.White,
-            fontSize = alarmTitleFontSize(presentation.alarmName.length),
-            fontWeight = FontWeight.ExtraBold,
+            color = colors.onSurface,
+            fontSize = if (compact) 22.sp else 30.sp,
+            lineHeight = if (compact) 28.sp else 36.sp,
+            fontWeight = FontWeight.SemiBold,
             textAlign = TextAlign.Center,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
@@ -200,20 +224,14 @@ private fun AlarmIdentityZone(
                 .semantics { contentDescription = presentation.alarmName }
                 .testTag(ALARM_TITLE_TAG),
         )
-        Spacer(Modifier.height(10.dp))
-        Text(
-            text = timeText,
-            color = SecondaryText,
-            fontSize = 28.sp,
-            fontWeight = FontWeight.Medium,
-        )
-        Text(
+        if (!compact || presentation.calendarWarning) Text(
             text = if (presentation.calendarWarning) {
                 "캘린더 일정을 확인해 주세요"
             } else {
                 "좋은 하루를 시작할 시간이에요"
             },
-            color = if (presentation.calendarWarning) WarningText else SecondaryText,
+            color = if (presentation.calendarWarning) colors.error else colors.onSurfaceVariant,
+            fontSize = 13.sp,
             textAlign = TextAlign.Center,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
@@ -229,6 +247,7 @@ private fun HoldToSnoozeZone(
     onSnooze: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val colors = MaterialTheme.colorScheme
     val haptic = LocalHapticFeedback.current
     val currentOnSnooze by rememberUpdatedState(onSnooze)
     var isHolding by remember { mutableStateOf(false) }
@@ -257,11 +276,12 @@ private fun HoldToSnoozeZone(
     }
 
     Surface(
-        color = Color.White.copy(alpha = 0.07f),
-        shape = RoundedCornerShape(28.dp),
+        color = colors.surfaceVariant.copy(alpha = 0.65f),
+        border = BorderStroke(1.dp, colors.outlineVariant),
+        shape = RoundedCornerShape(24.dp),
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 20.dp, vertical = 4.dp)
+            .padding(vertical = 4.dp)
             .alpha(if (actionsEnabled) 1f else 0.55f)
             .testTag(SNOOZE_HOLD_TAG)
             .semantics(mergeDescendants = true) {
@@ -292,22 +312,22 @@ private fun HoldToSnoozeZone(
         Row(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 22.dp, vertical = 8.dp),
+                .padding(horizontal = 16.dp, vertical = 8.dp),
             horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Box(contentAlignment = Alignment.Center) {
                 CircularProgressIndicator(
                     progress = { holdProgress },
-                    modifier = Modifier.size(54.dp),
-                    color = AlarmMint,
-                    trackColor = Color.White.copy(alpha = 0.12f),
-                    strokeWidth = 6.dp,
+                    modifier = Modifier.size(46.dp),
+                    color = colors.primary,
+                    trackColor = colors.onSurface.copy(alpha = 0.12f),
+                    strokeWidth = 3.dp,
                     strokeCap = StrokeCap.Round,
                 )
                 Text(
                     text = "${(holdProgress * 3f).roundToInt().coerceIn(0, 3)}",
-                    color = Color.White,
+                    color = colors.onSurface,
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Bold,
                 )
@@ -318,13 +338,14 @@ private fun HoldToSnoozeZone(
             ) {
                 Text(
                     text = "${clampedMinutes}분 후 다시 울림",
-                    color = Color.White,
-                    fontSize = 18.sp,
+                    color = colors.onSurface,
+                    fontSize = 16.sp,
                     fontWeight = FontWeight.Bold,
                 )
                 Text(
                     text = "3초간 길게 누르기",
-                    color = SecondaryText,
+                    color = colors.onSurfaceVariant,
+                    fontSize = 12.sp,
                     modifier = Modifier.padding(top = 5.dp),
                 )
             }
@@ -341,6 +362,7 @@ private fun DragToDismissZone(
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val colors = MaterialTheme.colorScheme
     val haptic = LocalHapticFeedback.current
     val currentOnDismiss by rememberUpdatedState(onDismiss)
     var dragTarget by remember { mutableStateOf(Offset.Zero) }
@@ -392,17 +414,20 @@ private fun DragToDismissZone(
         pulse
     }
 
-    Box(
+    BoxWithConstraints(
         modifier = modifier.fillMaxWidth(),
         contentAlignment = Alignment.Center,
     ) {
         val progress = dismissProgress(dragOffset.getDistance(), thresholdPx)
         val pulse = animatedPulse
-        val ringColor = lerp(AlarmBlue, AlarmMint, progress)
+        val ringColor = lerp(colors.primary, colors.onSurface, progress * 0.55f)
+        val orbitSize = minOf(310.dp, maxWidth, (maxHeight - 36.dp).coerceAtLeast(88.dp))
+        val handleSize = minOf(172.dp, orbitSize * 0.66f)
 
         Box(
             modifier = Modifier
-                .size(310.dp)
+                .padding(bottom = 24.dp)
+                .size(orbitSize)
                 .drawBehind {
                     repeat(3) { index ->
                         val phase = if (animationsDisabled) {
@@ -419,7 +444,7 @@ private fun DragToDismissZone(
                         drawCircle(
                             color = ringColor.copy(alpha = alpha.coerceIn(0f, 1f)),
                             radius = radius,
-                            style = Stroke(width = 3.dp.toPx()),
+                            style = Stroke(width = 1.dp.toPx()),
                         )
                     }
                 },
@@ -433,12 +458,10 @@ private fun DragToDismissZone(
                             y = dragOffset.y.roundToInt(),
                         )
                     }
-                    .size(196.dp)
+                    .size(handleSize)
                     .alpha(if (actionsEnabled) 1f else 0.55f)
                     .background(
-                        Brush.radialGradient(
-                            listOf(ringColor, AlarmBlue.copy(alpha = 0.88f)),
-                        ),
+                        ringColor,
                         CircleShape,
                     )
                     .testTag(DISMISS_HANDLE_TAG)
@@ -512,21 +535,28 @@ private fun DragToDismissZone(
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
-                        text = "알람 해제",
-                        color = Color(0xFF06101C),
-                        fontSize = 29.sp,
-                        fontWeight = FontWeight.ExtraBold,
+                        text = if (handleSize < 130.dp) "해제" else "알람 해제",
+                        color = colors.onPrimary,
+                        fontSize = if (handleSize < 130.dp) 18.sp else 24.sp,
+                        fontWeight = FontWeight.Bold,
                         textAlign = TextAlign.Center,
                     )
-                    Text(
-                        text = "${(progress * 100f).roundToInt()}%",
-                        color = Color(0xB806101C),
-                        fontSize = 13.sp,
+                    if (handleSize >= 100.dp) Text(
+                        text = if (progress > 0f) "${(progress * 100f).roundToInt()}%" else "드래그",
+                        color = colors.onPrimary.copy(alpha = 0.7f),
+                        fontSize = 12.sp,
                         fontWeight = FontWeight.Bold,
                     )
                 }
             }
         }
+        Text(
+            text = if (actionsEnabled) "원을 원하는 방향으로 밀어 해제" else "알람을 처리하고 있어요",
+            color = colors.onSurfaceVariant,
+            fontSize = 12.sp,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 4.dp),
+        )
     }
 }
 

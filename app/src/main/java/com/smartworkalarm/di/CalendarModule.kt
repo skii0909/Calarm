@@ -6,6 +6,11 @@ import android.content.SharedPreferences
 import com.smartworkalarm.data.calendar.CalendarContractEventSource
 import com.smartworkalarm.data.calendar.CalendarContractConnectionRepository
 import com.smartworkalarm.data.calendar.SharedPreferencesCalendarSelectionRepository
+import com.smartworkalarm.data.calendar.CombinedCalendarEventSource
+import com.smartworkalarm.data.calendar.CombinedCalendarConnectionRepository
+import com.smartworkalarm.outlook.OutlookStore
+import java.time.Clock
+import java.time.ZoneId
 import com.smartworkalarm.domain.repository.CalendarConnectionRepository
 import com.smartworkalarm.domain.repository.CalendarEventSource
 import com.smartworkalarm.domain.repository.CalendarSelectionRepository
@@ -20,16 +25,6 @@ import dagger.hilt.components.SingletonComponent
 @InstallIn(SingletonComponent::class)
 abstract class CalendarBindings {
     @Binds
-    abstract fun bindCalendarConnectionRepository(
-        implementation: CalendarContractConnectionRepository,
-    ): CalendarConnectionRepository
-
-    @Binds
-    abstract fun bindCalendarEventSource(
-        implementation: CalendarContractEventSource,
-    ): CalendarEventSource
-
-    @Binds
     abstract fun bindCalendarSelectionRepository(
         implementation: SharedPreferencesCalendarSelectionRepository,
     ): CalendarSelectionRepository
@@ -38,6 +33,15 @@ abstract class CalendarBindings {
 @Module
 @InstallIn(SingletonComponent::class)
 object CalendarModule {
+    @Provides
+    fun connectionRepository(google: CalendarContractConnectionRepository, outlook: OutlookStore): CalendarConnectionRepository =
+        CombinedCalendarConnectionRepository(google, outlook)
+
+    @Provides
+    fun eventSource(google: CalendarContractEventSource, connection: CalendarContractConnectionRepository,
+        selection: CalendarSelectionRepository, outlook: OutlookStore, clock: Clock): CalendarEventSource =
+        CombinedCalendarEventSource(google, connection::getState, selection::getSelectedCalendarIds, outlook, clock, ZoneId::systemDefault)
+
     @Provides
     fun provideContentResolver(@ApplicationContext context: Context): ContentResolver =
         context.contentResolver

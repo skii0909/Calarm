@@ -29,7 +29,7 @@ class AlarmSchedulerImpl @Inject constructor(
     private val preAlarmNotifications: PreAlarmNotificationCanceller,
 ) : AlarmScheduler, ShiftAlarmScheduler {
     override fun schedule(alarmId: Long, triggerAt: Instant): ScheduleResult {
-        cancelPostedPreAlarmSafely(AlarmKind.REGULAR, alarmId)
+        cancelObsoletePreAlarmSafely(AlarmKind.REGULAR, alarmId, triggerAt)
         return scheduleExact(alarmId, triggerAt, snooze = false).also { result ->
             if (result == ScheduleResult.Scheduled) {
                 schedulePreAlarmSafely(AlarmKind.REGULAR, alarmId, triggerAt)
@@ -39,6 +39,18 @@ class AlarmSchedulerImpl @Inject constructor(
 
     override fun scheduleSnooze(alarmId: Long, triggerAt: Instant): ScheduleResult =
         scheduleExact(alarmId, triggerAt, snooze = true)
+
+    override fun cancelSnooze(alarmId: Long) {
+        alarmManager.cancel(legacyPendingIntent(ACTION_ALARM, alarmId, SNOOZE_REQUEST_OFFSET))
+        alarmManager.cancel(pendingIntent(alarmId, snooze = true, Instant.EPOCH))
+        recordAuditSafely { auditStore.recordCancelled(regularAuditKey(alarmId, snooze = true)) }
+    }
+
+    override fun cancelShiftSnooze(shiftTypeId: Long) {
+        alarmManager.cancel(legacyPendingIntent(ACTION_SHIFT_ALARM, shiftTypeId, SHIFT_SNOOZE_REQUEST_OFFSET))
+        alarmManager.cancel(shiftPendingIntent(shiftTypeId, snooze = true, Instant.EPOCH))
+        recordAuditSafely { auditStore.recordCancelled(shiftAuditKey(shiftTypeId, snooze = true)) }
+    }
 
     override fun cancel(alarmId: Long) {
         cancelPostedPreAlarmSafely(AlarmKind.REGULAR, alarmId)
@@ -58,7 +70,7 @@ class AlarmSchedulerImpl @Inject constructor(
     }
 
     override fun scheduleShift(shiftTypeId: Long, triggerAt: Instant): ScheduleResult {
-        cancelPostedPreAlarmSafely(AlarmKind.SHIFT, shiftTypeId)
+        cancelObsoletePreAlarmSafely(AlarmKind.SHIFT, shiftTypeId, triggerAt)
         return scheduleShiftExact(shiftTypeId, triggerAt, snooze = false, scheduledOccurrenceAt = triggerAt)
             .also { result ->
                 if (result == ScheduleResult.Scheduled) {
@@ -100,7 +112,9 @@ class AlarmSchedulerImpl @Inject constructor(
         val namespace = if (snooze) SNOOZE_REQUEST_OFFSET else 0
         alarmManager.cancel(legacyPendingIntent(ACTION_ALARM, alarmId, namespace))
         if (!permission.isGranted()) return ScheduleResult.ExactAlarmPermissionRequired
+        val previous = runCatching { auditStore.nextTriggerFor(regularAuditKey(alarmId, snooze)) }.getOrNull()
         val operation = pendingIntent(alarmId, snooze, triggerAt)
+        try {
         if (snooze) {
             alarmManager.setExactAndAllowWhileIdle(
                 AlarmManager.RTC_WAKEUP,
@@ -116,6 +130,10 @@ class AlarmSchedulerImpl @Inject constructor(
                 operation,
             )
         }
+        } catch (error: RuntimeException) {
+            if (previous != null) runCatching { pendingIntent(alarmId, snooze, previous) }
+            throw error
+        }
         recordAuditSafely { auditStore.recordScheduled(regularAuditKey(alarmId, snooze), triggerAt) }
         return ScheduleResult.Scheduled
     }
@@ -129,7 +147,9 @@ class AlarmSchedulerImpl @Inject constructor(
         val namespace = if (snooze) SHIFT_SNOOZE_REQUEST_OFFSET else SHIFT_REQUEST_OFFSET
         alarmManager.cancel(legacyPendingIntent(ACTION_SHIFT_ALARM, shiftTypeId, namespace))
         if (!permission.isGranted()) return ScheduleResult.ExactAlarmPermissionRequired
+        val previous = runCatching { auditStore.nextTriggerFor(shiftAuditKey(shiftTypeId, snooze)) }.getOrNull()
         val operation = shiftPendingIntent(shiftTypeId, snooze, scheduledOccurrenceAt)
+        try {
         if (snooze) {
             alarmManager.setExactAndAllowWhileIdle(
                 AlarmManager.RTC_WAKEUP,
@@ -144,6 +164,10 @@ class AlarmSchedulerImpl @Inject constructor(
                 ),
                 operation,
             )
+        }
+        } catch (error: RuntimeException) {
+            if (previous != null && !snooze) runCatching { shiftPendingIntent(shiftTypeId, false, previous) }
+            throw error
         }
         recordAuditSafely { auditStore.recordScheduled(shiftAuditKey(shiftTypeId, snooze), triggerAt) }
         return ScheduleResult.Scheduled
@@ -234,6 +258,14 @@ class AlarmSchedulerImpl @Inject constructor(
 
     private fun cancelPostedPreAlarmSafely(kind: AlarmKind, id: Long) {
         runCatching { preAlarmNotifications.cancel(kind, id) }
+    }
+
+    private fun cancelObsoletePreAlarmSafely(kind: AlarmKind, id: Long, occurrenceAt: Instant) {
+        runCatching {
+            if (!preAlarmNotifications.wasDelivered(AlarmOccurrenceKey(kind, id, occurrenceAt))) {
+                preAlarmNotifications.cancel(kind, id)
+            }
+        }
     }
 
     private fun preAlarmPendingIntent(

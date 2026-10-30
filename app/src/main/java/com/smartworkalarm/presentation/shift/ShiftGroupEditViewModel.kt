@@ -22,6 +22,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.CancellationException
 
 data class ShiftGroupEditState(
     val id: Long = 0,
@@ -38,6 +39,7 @@ data class ShiftGroupEditState(
     val shiftTypesError: String? = null,
     val aliasesError: String? = null,
     val emergencyError: String? = null,
+    val saveError: String? = null,
     val isLoading: Boolean = false,
     val saved: Boolean = false,
     val deleted: Boolean = false,
@@ -62,6 +64,7 @@ data class ShiftTypeEditState(
     val aliasesError: String? = null,
     val repeatDaysError: String? = null,
     val loadError: String? = null,
+    val saveError: String? = null,
     val saved: Boolean = false,
     val deleted: Boolean = false,
     val hasUnsavedChanges: Boolean = false,
@@ -130,6 +133,7 @@ class ShiftGroupEditViewModel @Inject constructor(
     }
 
     fun saveGroup() {
+        _state.update { it.copy(saveError = null) }
         val current = _state.value
         when {
             current.name.isBlank() -> _state.update { it.copy(nameError = "그룹 이름을 입력하세요") }
@@ -144,7 +148,14 @@ class ShiftGroupEditViewModel @Inject constructor(
                 val payload = current.toGroup(name = current.name.trim()).copy(isDraft = false)
                 val payloadSnapshot = payload.editableSnapshot()
                 viewModelScope.launch {
-                    val savedId = reconcileShiftAlarms.saveGroup(payload)
+                    val savedId = try {
+                        reconcileShiftAlarms.saveGroup(payload)
+                    } catch (cancelled: CancellationException) {
+                        throw cancelled
+                    } catch (error: Exception) {
+                        _state.update { it.copy(saved = false, saveError = error.message ?: "교대 그룹을 저장하지 못했습니다. 다시 시도해 주세요.") }
+                        return@launch
+                    }
                     _state.update {
                         groupBaseline = payloadSnapshot
                         val hasNewChanges = it.editableSnapshot() != payloadSnapshot
@@ -261,6 +272,7 @@ class ShiftGroupEditViewModel @Inject constructor(
     fun onShiftHolidayChanged(value: Boolean) = updateShiftTypeState { it.copy(skipOnPublicHoliday = value) }
 
     fun saveShiftType() {
+        _shiftTypeState.update { it.copy(saveError = null) }
         val current = _shiftTypeState.value
         if (current.loadError != null) return
         val aliases = normalizeAliases(current.exactTitles)
@@ -276,7 +288,14 @@ class ShiftGroupEditViewModel @Inject constructor(
                 val payload = current.toShiftType(aliases)
                 val payloadSnapshot = payload.editableSnapshot()
                 viewModelScope.launch {
-                    val savedId = reconcileShiftAlarms.saveShiftType(payload)
+                    val savedId = try {
+                        reconcileShiftAlarms.saveShiftType(payload)
+                    } catch (cancelled: CancellationException) {
+                        throw cancelled
+                    } catch (error: Exception) {
+                        _shiftTypeState.update { it.copy(saved = false, saveError = error.message ?: "근무 형태를 저장하지 못했습니다. 다시 시도해 주세요.") }
+                        return@launch
+                    }
                     _shiftTypeState.update {
                         shiftTypeBaseline = payloadSnapshot
                         val hasNewChanges = it.editableSnapshot() != payloadSnapshot

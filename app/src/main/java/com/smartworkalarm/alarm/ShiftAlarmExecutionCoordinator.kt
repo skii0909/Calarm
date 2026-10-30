@@ -18,6 +18,7 @@ import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.ZoneId
 import javax.inject.Inject
+import kotlinx.coroutines.withTimeoutOrNull
 
 class ShiftAlarmExecutionCoordinator internal constructor(
     private val repository: ShiftAlarmRepository,
@@ -32,6 +33,7 @@ class ShiftAlarmExecutionCoordinator internal constructor(
     private val zoneId: ZoneId,
     private val skipStore: OccurrenceSkipStore,
     private val preAlarmNotifications: PreAlarmNotificationCanceller,
+    private val audit: AlarmScheduleAuditStore? = null,
 ) {
     @Inject
     constructor(
@@ -44,6 +46,7 @@ class ShiftAlarmExecutionCoordinator internal constructor(
         zoneId: ZoneId,
         skipStore: OccurrenceSkipStore,
         preAlarmNotifications: PreAlarmNotificationCanceller,
+        audit: AlarmScheduleAuditStore? = null,
     ) : this(
         repository = repository,
         scheduler = scheduler,
@@ -61,6 +64,7 @@ class ShiftAlarmExecutionCoordinator internal constructor(
         zoneId = zoneId,
         skipStore = skipStore,
         preAlarmNotifications = preAlarmNotifications,
+        audit = audit,
     )
 
     suspend fun execute(
@@ -80,13 +84,17 @@ class ShiftAlarmExecutionCoordinator internal constructor(
         }
 
         if (!isSnooze) {
-            calculator.execute(shiftType.toAlarm(), now, zoneId)?.let { scheduler.scheduleShift(shiftType.id, it) }
-            if (skipStore.consume(AlarmOccurrenceKey(AlarmKind.SHIFT, shiftType.id, scheduledOccurrenceAt))) {
+            preserveCurrentAlarm { audit?.recordHandled("shift:$shiftTypeId", scheduledOccurrenceAt) }
+            preserveCurrentAlarm { calculator.execute(shiftType.toAlarm(), now, zoneId)?.let { scheduler.scheduleShift(shiftType.id, it) } }
+            if (preserveCurrentAlarm { skipStore.consume(AlarmOccurrenceKey(AlarmKind.SHIFT, shiftType.id, scheduledOccurrenceAt)) } == true) {
                 return ExecutionOutcome.SkippedByUser
             }
         }
 
-        return when (val decision = decisionProvider(group, shiftType, occurrenceDate)) {
+        val safeDecision = preserveCurrentAlarm {
+            withTimeoutOrNull(5_000) { decisionProvider(group, shiftType, occurrenceDate) }
+        } ?: ShiftExecutionDecision.Evaluated(ShiftDayEvaluation.ReadFailure)
+        return when (val decision = safeDecision) {
             ShiftExecutionDecision.SkipForVacation -> ExecutionOutcome.SkippedForVacation
             is ShiftExecutionDecision.Effective -> outcomeFor(decision.value, shiftType, scheduledOccurrenceAt)
             is ShiftExecutionDecision.Evaluated -> when (val evaluation = decision.value) {

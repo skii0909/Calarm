@@ -10,5 +10,6 @@ sealed interface ScheduleResult {
 interface AlarmScheduler {
     fun schedule(alarmId: Long, triggerAt: Instant): ScheduleResult
     fun cancel(alarmId: Long)
+    fun cancelSnooze(alarmId: Long) = Unit
     fun scheduleSnooze(alarmId: Long, triggerAt: Instant): ScheduleResult
 }

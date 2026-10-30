@@ -1,8 +1,10 @@
 .worktrees/
-.superpowers/sdd/
+.superpowers/
 .gradle/
 .kotlin/
 local.properties
 **/build/
 *.iml
 .idea/
+.docx-render/
+*.apk

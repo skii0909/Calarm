@@ -12,6 +12,10 @@ import com.smartworkalarm.MainActivity
 import com.smartworkalarm.R
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneId
+import java.time.Duration
 
 class NextDayPreviewNotificationFactory @Inject constructor(
     @param:ApplicationContext private val context: Context,
@@ -20,9 +24,13 @@ class NextDayPreviewNotificationFactory @Inject constructor(
     fun post(
         alarmEvaluation: AlarmPreviewEvaluation,
         shiftEvaluation: ShiftPreviewEvaluation,
-    ) {
+        targetDate: LocalDate,
+        now: Instant,
+        zoneId: ZoneId,
+    ): Boolean {
         val rows = NextDayPreviewNotificationPolicy.rows(alarmEvaluation, shiftEvaluation)
-        if (rows.isEmpty()) return
+        if (rows.isEmpty()) return true
+        if (!manager.areNotificationsEnabled()) return false
         manager.createNotificationChannel(
             NotificationChannel(CHANNEL_ID, "다음 날 알람 변경", NotificationManager.IMPORTANCE_DEFAULT).apply {
                 enableVibration(true)
@@ -32,7 +40,10 @@ class NextDayPreviewNotificationFactory @Inject constructor(
                 )
             },
         )
+        if (manager.getNotificationChannel(CHANNEL_ID)?.importance == NotificationManager.IMPORTANCE_NONE) return false
         val text = format(rows)
+        val expiresIn = Duration.between(now, targetDate.atStartOfDay(zoneId).toInstant()).toMillis()
+        if (expiresIn <= 0) return false
         val openApp = PendingIntent.getActivity(
             context,
             0,
@@ -43,13 +54,15 @@ class NextDayPreviewNotificationFactory @Inject constructor(
             NOTIFICATION_ID,
             NotificationCompat.Builder(context, CHANNEL_ID)
                 .setSmallIcon(R.drawable.ic_launcher_alarm)
-                .setContentTitle(text.title)
+                .setContentTitle("${targetDate.monthValue}월 ${targetDate.dayOfMonth}일 ${text.title}")
                 .setContentText(text.content)
                 .setStyle(NotificationCompat.BigTextStyle().bigText(text.detail))
                 .setContentIntent(openApp)
+                .setTimeoutAfter(expiresIn)
                 .setAutoCancel(true)
                 .build(),
         )
+        return true
     }
 
     private fun format(rows: List<String>): PreviewNotificationContent = if (rows.size == 1) {

@@ -23,4 +23,27 @@ class KoreanPublicHolidayProviderTest {
         assertNull(provider.find(LocalDate.of(2026, 8, 18)))
         assertNull(provider.find(LocalDate.of(2032, 1, 1)))
     }
+
+    @Test fun `2026 law includes labour and constitution holidays through supported years`() {
+        for (year in 2026..2031) {
+            assertEquals("노동절", provider.find(LocalDate.of(year, 5, 1))?.name)
+            assertEquals("제헌절", provider.find(LocalDate.of(year, 7, 17))?.name)
+        }
+        assertEquals("노동절 대체공휴일", provider.find(LocalDate.of(2027, 5, 3))?.name)
+        assertEquals("제헌절 대체공휴일", provider.find(LocalDate.of(2027, 7, 19))?.name)
+        assertNull(provider.find(LocalDate.of(2027, 5, 4)))
+        assertNull(provider.find(LocalDate.of(2027, 7, 20)))
+    }
+
+    @Test fun `holiday periods end before the following working day`() {
+        assertEquals("개천절 대체공휴일", provider.find(LocalDate.of(2026, 10, 5))?.name)
+        assertNull(provider.find(LocalDate.of(2026, 10, 6)))
+        assertNull(provider.find(LocalDate.of(2026, 10, 7)))
+        assertNull(provider.find(LocalDate.of(2026, 10, 8)))
+        assertEquals("한글날", provider.find(LocalDate.of(2026, 10, 9))?.name)
+        assertEquals("설날 대체공휴일", provider.find(LocalDate.of(2027, 2, 9))?.name)
+        assertNull(provider.find(LocalDate.of(2027, 2, 10)))
+        assertEquals("개천절 대체공휴일", provider.find(LocalDate.of(2028, 10, 5))?.name)
+        assertNull(provider.find(LocalDate.of(2028, 10, 6)))
+    }
 }

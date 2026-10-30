@@ -9,6 +9,8 @@ import android.net.Uri
 import android.os.IBinder
 import android.os.Handler
 import android.os.Looper
+import android.os.PowerManager
+import android.util.Log
 import android.os.VibrationEffect
 import android.os.Vibrator
 import androidx.core.content.getSystemService
@@ -32,10 +34,21 @@ class AlarmRingingService : Service() {
     private val ringingSessionState = RingingSessionStateMachine()
     private val volumeHandler = Handler(Looper.getMainLooper())
     private var volumeStep = 0
+    private var gradualVolume = false
+    private var preparationTimeout: Runnable? = null
+    private var cancelPreparation: (() -> Unit)? = null
+    private var preparationWakeLock: PowerManager.WakeLock? = null
+    private val playbackController = AlarmPlaybackController(
+        object : AlarmPlayback {
+            override fun start(uri: String, onFailure: () -> Unit) = startPlayer(uri, onFailure)
+            override fun stop() = releasePlayer()
+        },
+        onExhausted = { Log.e("CalarmPlayback", "All alarm sounds failed, including bundled fallback") },
+    )
     private val volumeRamp = object : Runnable {
         override fun run() {
             val volume = GradualVolume.atSecond(volumeStep++)
-            player?.setVolume(volume, volume)
+            runCatching { player?.setVolume(volume, volume) }
             if (volumeStep <= 60 && player != null) volumeHandler.postDelayed(this, 1_000)
         }
     }
@@ -49,7 +62,7 @@ class AlarmRingingService : Service() {
             ACTION_SNOOZE -> handleSnooze(intent)
             else -> Unit
         }
-        return START_NOT_STICKY
+        return ringingServiceRestartMode(intent?.action)
     }
 
     private fun handleDismiss(intent: Intent) {
@@ -109,23 +122,21 @@ class AlarmRingingService : Service() {
                 session.snoozeMinutes,
             ),
         )
-        if (player == null) {
-            val selected = intent.getStringExtra(EXTRA_RINGTONE_URI)
-            val candidates = AlarmSoundResolver.candidates(
-                selected,
+        gradualVolume = intent.getBooleanExtra(EXTRA_GRADUAL_VOLUME, false)
+        playbackController.start(
+            AlarmSoundResolver.candidates(
+                intent.getStringExtra(EXTRA_RINGTONE_URI),
                 RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)?.toString(),
                 RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)?.toString(),
-            )
-            player = candidates.firstNotNullOfOrNull(::startPlayer)
-            if (intent.getBooleanExtra(EXTRA_GRADUAL_VOLUME, false) && player != null) {
-                volumeStep = 0
-                volumeHandler.removeCallbacks(volumeRamp)
-                volumeRamp.run()
-            }
-        }
-        getSystemService<Vibrator>()?.vibrate(
-            VibrationEffect.createWaveform(longArrayOf(0, 500, 500), 0),
+            ),
         )
+        runCatching {
+            getSystemService<Vibrator>()?.vibrate(
+                VibrationEffect.createWaveform(longArrayOf(0, 500, 500), 0),
+            )
+        }.onFailure {
+            Log.w("CalarmPlayback", "Alarm vibration unavailable", it)
+        }
     }
 
     private fun scheduleSnooze(session: ActiveRingingSession): ScheduleResult {
@@ -141,27 +152,81 @@ class AlarmRingingService : Service() {
         }
     }
 
-    private fun startPlayer(uri: String): MediaPlayer? {
-        val candidate = MediaPlayer()
-        return runCatching {
-            candidate.setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ALARM).build())
-            candidate.setDataSource(this, Uri.parse(uri))
-            candidate.isLooping = true
-            candidate.prepare()
-            candidate.start()
-            candidate
-        }.getOrElse {
-            candidate.release()
-            null
-        }
+    private fun startPlayer(uri: String, onFailure: () -> Unit) {
+        releasePlayer()
+        preparationWakeLock = runCatching {
+            getSystemService<PowerManager>()?.newWakeLock(
+                PowerManager.PARTIAL_WAKE_LOCK, "Calarm:audio-prepare",
+            )?.apply { acquire(10_000L) }
+        }.getOrNull()
+        preparationTimeout = Runnable {
+            Log.w("CalarmPlayback", "Alarm sound preparation timed out")
+            onFailure()
+        }.also { volumeHandler.postDelayed(it, 5_000L) }
+        val appContext = applicationContext
+        cancelPreparation = prepareAlarmPlayer(
+            executor = AlarmPreparationExecutors.forUri(uri),
+            dispatch = { completion -> volumeHandler.post { completion() }; Unit },
+            create = { MediaPlayer() },
+            configure = { candidate ->
+                candidate.setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ALARM).build())
+                candidate.setWakeMode(appContext, PowerManager.PARTIAL_WAKE_LOCK)
+                candidate.setDataSource(appContext, Uri.parse(uri))
+                candidate.isLooping = true
+                candidate.prepare()
+            },
+            dispose = { candidate -> runCatching { candidate.release() }; Unit },
+            onReady = { candidate ->
+                cancelPreparation = null
+                player = candidate
+                preparationTimeout?.let(volumeHandler::removeCallbacks)
+                preparationTimeout = null
+                try {
+                    candidate.setOnErrorListener { _, what, extra ->
+                        Log.w("CalarmPlayback", "Alarm sound failed: $what/$extra")
+                        if (player === candidate) onFailure()
+                        true
+                    }
+                    val initialVolume = if (gradualVolume) GradualVolume.atSecond(0) else 1f
+                    candidate.setVolume(initialVolume, initialVolume)
+                    candidate.start()
+                    releasePreparationWakeLock()
+                    if (gradualVolume) {
+                        volumeStep = 0
+                        volumeRamp.run()
+                    }
+                } catch (error: Exception) {
+                    Log.w("CalarmPlayback", "Unable to start prepared alarm sound", error)
+                    onFailure()
+                }
+            },
+            onFailure = { error ->
+                Log.w("CalarmPlayback", "Unable to prepare alarm sound", error)
+                onFailure()
+            },
+        )
+    }
+
+    private fun releasePreparationWakeLock() {
+        runCatching { preparationWakeLock?.let { if (it.isHeld) it.release() } }
+        preparationWakeLock = null
+    }
+
+    private fun releasePlayer() {
+        cancelPreparation?.invoke()
+        cancelPreparation = null
+        volumeHandler.removeCallbacks(volumeRamp)
+        preparationTimeout?.let(volumeHandler::removeCallbacks)
+        preparationTimeout = null
+        val previous = player
+        player = null
+        previous?.runCatching { release() }
+        releasePreparationWakeLock()
     }
 
     private fun stopRinging() {
-        volumeHandler.removeCallbacks(volumeRamp)
-        player?.runCatching { stop() }
-        player?.release()
-        player = null
-        getSystemService<Vibrator>()?.cancel()
+        playbackController.stop()
+        runCatching { getSystemService<Vibrator>()?.cancel() }
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
     }
@@ -188,11 +253,8 @@ class AlarmRingingService : Service() {
 
     override fun onDestroy() {
         ringingSessionState.clear()
-        volumeHandler.removeCallbacks(volumeRamp)
-        player?.runCatching { stop() }
-        player?.release()
-        player = null
-        getSystemService<Vibrator>()?.cancel()
+        playbackController.stop()
+        runCatching { getSystemService<Vibrator>()?.cancel() }
         super.onDestroy()
     }
 
@@ -222,6 +284,9 @@ class AlarmRingingService : Service() {
 
 internal fun canScheduleSnooze(snoozeEnabled: Boolean, requestedAction: String?): Boolean =
     snoozeEnabled && requestedAction == AlarmRingingService.ACTION_SNOOZE
+
+internal fun ringingServiceRestartMode(action: String?): Int =
+    if (action == AlarmRingingService.ACTION_START) Service.START_REDELIVER_INTENT else Service.START_NOT_STICKY
 
 private fun Intent.scheduledOccurrenceAt(): Instant? =
     getLongExtra(AlarmSchedulerImpl.EXTRA_SCHEDULED_OCCURRENCE_AT, Long.MIN_VALUE)

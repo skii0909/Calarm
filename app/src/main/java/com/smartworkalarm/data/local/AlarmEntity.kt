@@ -20,4 +20,5 @@ data class AlarmEntity(
     @ColumnInfo(name = "snooze_enabled", defaultValue = "1") val snoozeEnabled: Boolean = true,
     @ColumnInfo(name = "snooze_minutes", defaultValue = "5") val snoozeMinutes: Int = 5,
     @ColumnInfo(name = "created_at") val createdAt: Long,
+    @ColumnInfo(name = "calendar_keyword_exact_match", defaultValue = "0") val calendarKeywordExactMatch: Boolean = false,
 )

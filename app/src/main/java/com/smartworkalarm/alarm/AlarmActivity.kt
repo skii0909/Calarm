@@ -54,6 +54,9 @@ class AlarmActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Keep the visible ringing window awake until dismissal or snooze closes it.
+        // Android releases this window-scoped policy when the activity leaves the foreground.
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
             setShowWhenLocked(true)
             setTurnScreenOn(true)
@@ -97,6 +100,7 @@ class AlarmActivity : ComponentActivity() {
         terminalResultReceiverRegistered = true
         acceptServiceEffect(terminalResultRouter.acceptStoredResult())
         if (isFinishing) return
+        if (savedInstanceState == null) handleNotificationAction(intent)
         setContent {
             val presentation = presentationState.current
             val terminalState = terminalActionController.state
@@ -122,6 +126,18 @@ class AlarmActivity : ComponentActivity() {
         setIntent(intent)
         presentationState.replace(IntentAlarmPayload(intent))
         presentationState.current.sessionKey?.let(terminalActionController::replaceSession)
+        handleNotificationAction(intent)
+    }
+
+    private fun handleNotificationAction(intent: Intent) {
+        val action = intent.action
+        // Consume once: recreation must not repeat a snooze or dismiss request.
+        intent.action = null
+        if (action == ACTION_DISMISS ||
+            (action == ACTION_SNOOZE && presentationState.current.snoozeEnabled)
+        ) {
+            send(action, presentationState.current)
+        }
     }
 
     private fun send(action: String, presentation: AlarmPresentation) {

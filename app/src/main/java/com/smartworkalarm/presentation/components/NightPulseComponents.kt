@@ -32,9 +32,9 @@ fun NightPulseSection(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(24.dp),
         color = MaterialTheme.colorScheme.surface,
-        tonalElevation = 3.dp,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = .5f)),
     ) {
-        Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
                 Text(title, style = MaterialTheme.typography.titleMedium)
                 subtitle?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
@@ -50,7 +50,7 @@ fun GradientHero(content: @Composable () -> Unit) {
         modifier = Modifier
             .fillMaxWidth()
             .background(
-                Brush.linearGradient(listOf(Color(0xFF7657FF), Color(0xFF386BCF), Color(0xFF18A8B5))),
+                Brush.linearGradient(listOf(MaterialTheme.colorScheme.surfaceContainerHigh, MaterialTheme.colorScheme.surface)),
                 RoundedCornerShape(28.dp),
             )
             .padding(22.dp),
@@ -60,23 +60,21 @@ fun GradientHero(content: @Composable () -> Unit) {
 
 @Composable
 fun FeaturePill(text: String) {
-    Surface(shape = RoundedCornerShape(50), color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = .8f)) {
-        Text(text, modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp), style = MaterialTheme.typography.labelMedium)
+    Surface(shape = RoundedCornerShape(8.dp), color = MaterialTheme.colorScheme.surfaceVariant, contentColor = MaterialTheme.colorScheme.onSurfaceVariant) {
+        Text(text, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp), style = MaterialTheme.typography.labelSmall)
     }
 }
 
 @Composable
-fun DayToggle(label: String, selected: Boolean, onClick: () -> Unit) {
+fun DayToggle(label: String, selected: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
     Surface(
-        modifier = Modifier.size(42.dp).selectable(selected = selected, onClick = onClick, role = Role.Checkbox),
-        shape = RoundedCornerShape(14.dp),
-        color = if (selected) MaterialTheme.colorScheme.primary else Color(0xFF090C16),
-        contentColor = if (selected) MaterialTheme.colorScheme.onPrimary else Color.White,
-        border = BorderStroke(if (selected) 3.dp else 1.dp, if (selected) Color.White else Color(0xFF69738A)),
-        shadowElevation = if (selected) 7.dp else 0.dp,
+        modifier = modifier.size(40.dp).selectable(selected = selected, onClick = onClick, role = Role.Checkbox),
+        shape = RoundedCornerShape(12.dp),
+        color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
+        contentColor = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+        border = BorderStroke(1.dp, if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant),
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-            if (selected) Text("✓", style = MaterialTheme.typography.labelSmall)
             Text(label, style = MaterialTheme.typography.labelLarge)
         }
     }

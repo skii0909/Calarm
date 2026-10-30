@@ -10,8 +10,8 @@ object CalendarKeywordMatcher {
         .filter(String::isNotEmpty)
         .distinct()
 
-    fun matches(title: String?, keywords: List<String>): Boolean {
+    fun matches(title: String?, keywords: List<String>, exactMatch: Boolean = false): Boolean {
         val normalizedTitle = title?.trim()?.lowercase(Locale.ROOT) ?: return false
-        return normalize(keywords).any(normalizedTitle::contains)
+        return normalize(keywords).any { if (exactMatch) normalizedTitle == it else normalizedTitle.contains(it) }
     }
 }

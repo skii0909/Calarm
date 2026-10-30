@@ -53,10 +53,19 @@ class CalculateNextOccurrenceUseCaseTest {
     }
 
     @Test
-    fun `alarm without repeat days has no next occurrence`() {
+    fun `one-time alarm without repeat days later today returns today`() {
         val alarm = alarmAt(7, 0)
+        val now = instant(2026, 8, 17, 6, 30)
 
-        assertNull(useCase.execute(alarm, Instant.EPOCH, zone))
+        assertEquals(instant(2026, 8, 17, 7, 0), useCase.execute(alarm, now, zone))
+    }
+
+    @Test
+    fun `one-time alarm without repeat days after its time returns tomorrow`() {
+        val alarm = alarmAt(7, 0)
+        val now = instant(2026, 8, 17, 7, 1)
+
+        assertEquals(instant(2026, 8, 18, 7, 0), useCase.execute(alarm, now, zone))
     }
 
     private fun alarmAt(hour: Int, minute: Int, vararg days: RepeatDay) = Alarm(

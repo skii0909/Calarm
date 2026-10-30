@@ -111,7 +111,7 @@ class AlarmRingingScreenTest {
         var dismissCount = 0
         setRingingContent(onDismiss = { dismissCount += 1 })
 
-        composeRule.onNodeWithContentDescription("알람 해제").performClick()
+        composeRule.onNodeWithContentDescription("알람 해제").performSemanticsAction(SemanticsActions.OnClick)
 
         composeRule.runOnIdle { assertEquals(1, dismissCount) }
     }

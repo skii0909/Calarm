@@ -3,6 +3,7 @@ package com.smartworkalarm.prealarm
 import android.app.NotificationManager
 import android.content.Context
 import java.time.Instant
+import java.time.ZoneId
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
@@ -12,6 +13,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
+import kotlinx.coroutines.test.runTest
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [30])
@@ -74,7 +76,32 @@ class PreAlarmNotificationFactoryTest {
 
         val remaining = shadowOf(notificationManager).allNotifications
         assertEquals(1, remaining.size)
-        assertEquals("주간이 10분 뒤 울립니다", remaining.single().extras.getString("android.title"))
+        val expectedTime = shift.scheduledAt.atZone(ZoneId.systemDefault())
+            .toLocalTime().let { "%02d:%02d".format(it.hour, it.minute) }
+        assertEquals("주간 알람이 ${expectedTime}에 울립니다", remaining.single().extras.getString("android.title"))
+    }
+
+    @Test
+    fun `calendar sync cannot repost an occurrence dismissed with keep even after recreation`() {
+        val key = occurrence(AlarmKind.REGULAR, 71L, "2026-09-19T07:00:00Z")
+        factory.post(key, "출근")
+        factory.cancel(key)
+        PreAlarmNotificationFactory(context, notificationManager).post(key, "출근")
+        assertEquals(0, shadowOf(notificationManager).size())
+    }
+
+    @Test
+    fun `calendar reevaluation cancels ineligible prealert but preserves eligible one`() = runTest {
+        val regular = occurrence(AlarmKind.REGULAR, 72L, "2026-09-19T07:00:00Z")
+        val shift = occurrence(AlarmKind.SHIFT, 73L, "2026-09-19T07:00:00Z")
+        factory.post(regular, "출근")
+        factory.post(shift, "주간")
+        factory.reconcileEligibility(Instant.parse("2026-09-19T06:35:00Z")) { it == regular }
+        val remaining = shadowOf(notificationManager).allNotifications
+        assertEquals(1, remaining.size)
+        assertEquals(true, remaining.single().extras.getString("android.title")!!.startsWith("출근"))
+        factory.post(shift, "주간")
+        assertEquals(1, shadowOf(notificationManager).size())
     }
 
     private fun occurrence(kind: AlarmKind, id: Long, scheduledAt: String) =

@@ -10,6 +10,7 @@ import com.smartworkalarm.domain.repository.CalendarEventSource
 import com.smartworkalarm.domain.repository.ShiftAlarmRepository
 import com.smartworkalarm.domain.shift.EvaluateShiftGroupDayUseCase
 import com.smartworkalarm.domain.shift.ShiftDayEvaluator
+import com.smartworkalarm.domain.usecase.ShouldRingAlarmUseCase
 import java.time.Instant
 import java.time.ZoneId
 import kotlinx.coroutines.flow.Flow
@@ -46,6 +47,62 @@ class PreAlarmEligibilityTest {
         hour = 21,
         minute = 5,
     )
+
+    private val regularAlarm = Alarm(
+        id = 91L,
+        name = "출근 알람",
+        hour = 7,
+        minute = 0,
+        repeatDaysMask = 127,
+        enabled = true,
+        skipOnCalendarMatch = true,
+        calendarKeywords = listOf("휴가"),
+    )
+
+    @Test
+    fun `regular pre-alert is ineligible when calendar keyword skips its occurrence`() = runTest {
+        val occurrence = Instant.parse("2026-08-27T22:00:00Z")
+        val eligibility = eligibility(
+            group = group(enabled = true),
+            regularAlarm = regularAlarm,
+            events = Result.success(
+                listOf(
+                    CalendarEvent(
+                        title = "여름휴가",
+                        start = Instant.parse("2026-08-27T15:00:00Z"),
+                        end = Instant.parse("2026-08-28T15:00:00Z"),
+                        allDay = true,
+                    ),
+                ),
+            ),
+        )
+
+        assertNull(
+            eligibility.alarmNameIfEligible(
+                AlarmOccurrenceKey(AlarmKind.REGULAR, regularAlarm.id, occurrence),
+            ),
+        )
+    }
+
+    @Test
+    fun `regular pre-alert remains eligible when calendar read fails`() = runTest {
+        val eligibility = eligibility(
+            group = group(enabled = true),
+            regularAlarm = regularAlarm,
+            events = Result.failure(IllegalStateException("calendar unavailable")),
+        )
+
+        assertEquals(
+            regularAlarm.name,
+            eligibility.alarmNameIfEligible(
+                AlarmOccurrenceKey(
+                    AlarmKind.REGULAR,
+                    regularAlarm.id,
+                    Instant.parse("2026-08-27T22:00:00Z"),
+                ),
+            ),
+        )
+    }
 
     @Test
     fun `shift pre-alert is shown only for the shift selected by that date calendar`() = runTest {
@@ -101,6 +158,7 @@ class PreAlarmEligibilityTest {
     private fun eligibility(
         group: ShiftAlarmGroup,
         shiftTypes: List<ShiftTypeAlarm> = listOf(shiftType),
+        regularAlarm: Alarm? = null,
         events: Result<List<CalendarEvent>> = Result.success(
             listOf(
                 CalendarEvent(
@@ -111,21 +169,25 @@ class PreAlarmEligibilityTest {
                 ),
             ),
         ),
-    ) = PreAlarmEligibility(
-        alarmRepository = EmptyAlarmRepository,
-        shiftAlarmRepository = ShiftRepository(group, shiftTypes),
-        calendarEventSource = object : CalendarEventSource {
+    ): PreAlarmEligibility {
+        val eventSource = object : CalendarEventSource {
             override suspend fun getEventsOverlapping(
                 startInclusive: Instant,
                 endExclusive: Instant,
             ): Result<List<CalendarEvent>> = events
-        },
-        evaluateShiftGroupDay = EvaluateShiftGroupDayUseCase(
-            ShiftDayEvaluator(),
-            KoreanPublicHolidayProvider(),
-        ),
-        zoneId = ZoneId.of("Asia/Seoul"),
-    )
+        }
+        return PreAlarmEligibility(
+            alarmRepository = AlarmRepositoryStub(regularAlarm),
+            shiftAlarmRepository = ShiftRepository(group, shiftTypes),
+            calendarEventSource = eventSource,
+            shouldRingAlarm = ShouldRingAlarmUseCase(eventSource),
+            evaluateShiftGroupDay = EvaluateShiftGroupDayUseCase(
+                ShiftDayEvaluator(),
+                KoreanPublicHolidayProvider(),
+            ),
+            zoneId = ZoneId.of("Asia/Seoul"),
+        )
+    }
 
     private fun group(enabled: Boolean, isDraft: Boolean = false) = ShiftAlarmGroup(
         id = 10L,
@@ -135,10 +197,10 @@ class PreAlarmEligibilityTest {
         isDraft = isDraft,
     )
 
-    private object EmptyAlarmRepository : AlarmRepository {
-        override fun observeAll(): Flow<List<Alarm>> = flowOf(emptyList())
-        override suspend fun getById(id: Long): Alarm? = null
-        override suspend fun getEnabled(): List<Alarm> = emptyList()
+    private class AlarmRepositoryStub(private val alarm: Alarm?) : AlarmRepository {
+        override fun observeAll(): Flow<List<Alarm>> = flowOf(listOfNotNull(alarm))
+        override suspend fun getById(id: Long): Alarm? = alarm?.takeIf { it.id == id }
+        override suspend fun getEnabled(): List<Alarm> = listOfNotNull(alarm?.takeIf { it.enabled })
         override suspend fun upsert(alarm: Alarm): Long = alarm.id
         override suspend fun delete(id: Long) = Unit
         override suspend fun setEnabled(id: Long, enabled: Boolean) = Unit

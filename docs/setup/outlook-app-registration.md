@@ -34,6 +34,35 @@ client secret은 만들 필요가 없다. 계정 비밀번호, 토큰, 키 파�
 ## 현재 상태
 
 - 사용자는 2026-09-19에 Microsoft Entra 앱이 아직 등록되지 않았다고 확인했다.
-- 이 문서는 등록 준비이며 외부 앱 등록, 인증 코드 구현, 실제 로그인 검증이 완료됐다는 뜻이 아니다.
+- 코드에는 MSAL 로그인과 Graph 캘린더 조회가 구현되어 있다. 실제 Microsoft 앱 등록 및 계정 로그인 검증은 아직 수행하지 않았다.
+
+## client ID를 적용한 APK 생성
+
+프로젝트 루트의 PowerShell에서 실행한다. 아래 GUID 자리에 등록한 실제 Application (client) ID를 넣는다.
+
+```powershell
+.\gradlew.bat assembleDebug '-PoutlookClientId=12345678-1234-4234-9234-123456789abc'
+```
+
+이 값은 공개 앱 식별자이며 secret이 아니다. 지속적으로 사용하려면 개인 Gradle 설정 `%USERPROFILE%\.gradle\gradle.properties`에 `outlookClientId=실제-ID`를 추가할 수 있다. 명령행의 `-PoutlookClientId`가 우선한다. 비밀번호나 client secret은 설정하지 않는다.
+
+현재 컴퓨터의 debug 서명 해시는 빌드의 기본값으로 들어 있다. 다른 서명으로 빌드할 때는 등록된 서명 해시를 추가 지정한다.
+
+```powershell
+.\gradlew.bat assembleDebug '-PoutlookClientId=실제-ID' '-PoutlookSignatureHash=등록된-Base64-서명해시'
+```
+
+로그인 전에 앱은 실제 설치 APK의 서명이 구성과 일치하는지 검사한다. release에는 debug 서명을 기본값으로 넣지 않으며 release 서명 구성과 실제 배포 인증서 등록이 필요하다.
+
+client ID가 없는 APK는 로그인 버튼을 비활성화하고 Microsoft 로그인 설정이 완료되지 않았다고 안내한다. 이 APK로 정상 로그인이나 서버 일정 조회가 검증됐다고 간주하면 안 된다.
+
+## 연결 후 확인할 항목
+
+1. Calarm 설정의 `Microsoft 로그인`에서 개인 Microsoft 계정으로 로그인한다.
+2. 캘린더 읽기에 동의하고 기본 캘린더가 선택되는지 확인한다.
+3. 다른 소유 캘린더를 선택한 뒤 동기화 완료와 마지막 갱신 시각을 확인한다.
+4. Outlook에서 휴가/교대 일정을 만든 뒤 `지금 새로고침`으로 반영한다.
+5. 연결 해제 후 Outlook 선택 정보가 사라지고 Google 연결과 저장된 알람이 유지되는지 확인한다.
+6. 조직 테스트 계정이 있으면 Microsoft 365 로그인과 조직의 동의 정책을 별도로 확인한다.
 
 참고: [앱 등록](https://learn.microsoft.com/en-us/entra/identity-platform/quickstart-register-app), [Android 플랫폼 등록](https://learn.microsoft.com/en-us/entra/identity-platform/tutorial-mobile-app-android-prepare-app), [캘린더 조회 최소 권한](https://learn.microsoft.com/en-us/graph/api/calendar-list-calendarview?view=graph-rest-1.0).

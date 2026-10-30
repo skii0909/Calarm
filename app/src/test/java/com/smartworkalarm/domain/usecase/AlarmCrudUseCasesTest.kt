@@ -15,6 +15,41 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class AlarmCrudUseCasesTest {
+    @Test
+    fun `snooze cleanup failure cannot roll database back after new reservation succeeds`() = runTest {
+        val repository = FakeRepository(existing = alarm())
+        val scheduler = FakeScheduler(onCancelSnooze = { error("cleanup failed") })
+        val result = SaveAlarmUseCase(repository, scheduler, CalculateNextOccurrenceUseCase(), clock, zone)
+            .execute(alarm().copy(hour = 8))
+        assertTrue(result.isSuccess)
+        assertEquals(8, repository.existing?.hour)
+    }
+    @Test
+    fun `failed edit persistence must preserve existing operating system reservation`() = runTest {
+        val scheduler = FakeScheduler()
+        val repository = FakeRepository(existing = alarm(), failUpsert = true)
+        assertTrue(SaveAlarmUseCase(repository, scheduler, CalculateNextOccurrenceUseCase(), clock, zone)
+            .execute(alarm()).isFailure)
+        assertTrue(scheduler.cancelled.isEmpty())
+    }
+
+    @Test
+    fun `missing exact permission cannot report successful enabled save`() = runTest {
+        val repository = FakeRepository()
+        val scheduler = FakeScheduler(scheduleResult = ScheduleResult.ExactAlarmPermissionRequired)
+        assertTrue(SaveAlarmUseCase(repository, scheduler, CalculateNextOccurrenceUseCase(), clock, zone)
+            .execute(alarm(id = 0)).isFailure)
+        assertEquals(false, repository.existing?.enabled)
+    }
+
+    @Test
+    fun `failed toggle restores disabled state`() = runTest {
+        val repository = FakeRepository(existing = alarm().copy(enabled = false))
+        val scheduler = FakeScheduler(scheduleResult = ScheduleResult.ExactAlarmPermissionRequired)
+        runCatching { SetAlarmEnabledUseCase(repository, scheduler, CalculateNextOccurrenceUseCase(), clock, zone).execute(1, true) }
+        assertEquals(false, repository.existing?.enabled)
+    }
+
     private val instant = Instant.parse("2026-08-19T20:00:00Z")
     private val zone = ZoneId.of("Asia/Seoul")
     private val clock = Clock.fixed(instant, zone)
@@ -35,13 +70,25 @@ class AlarmCrudUseCasesTest {
     }
 
     @Test
-    fun `blank name and missing repeat days are rejected`() = runTest {
+    fun `blank name is rejected`() = runTest {
         val repository = FakeRepository()
         val useCase = SaveAlarmUseCase(repository, FakeScheduler(), CalculateNextOccurrenceUseCase(), clock, zone)
 
         assertTrue(useCase.execute(alarm(name = " ")).isFailure)
-        assertTrue(useCase.execute(alarm(mask = 0)).isFailure)
         assertEquals(0, repository.upsertCount)
+    }
+
+    @Test
+    fun `saving alarm without repeat days schedules one nearest occurrence`() = runTest {
+        val repository = FakeRepository(savedId = 42)
+        val scheduler = FakeScheduler()
+        val useCase = SaveAlarmUseCase(repository, scheduler, CalculateNextOccurrenceUseCase(), clock, zone)
+
+        assertEquals(42L, useCase.execute(alarm(id = 0, mask = 0)).getOrThrow())
+        assertEquals(
+            listOf(42L to Instant.parse("2026-08-19T22:00:00Z")),
+            scheduler.scheduled,
+        )
     }
 
     @Test
@@ -92,26 +139,30 @@ class AlarmCrudUseCasesTest {
         private val savedId: Long = 1,
         var existing: Alarm? = null,
         private val onDelete: () -> Unit = {},
+        private val failUpsert: Boolean = false,
     ) : AlarmRepository {
         var upsertCount = 0
         override fun observeAll(): Flow<List<Alarm>> = flowOf(listOfNotNull(existing))
         override suspend fun getById(id: Long): Alarm? = existing
         override suspend fun getEnabled(): List<Alarm> = listOfNotNull(existing?.takeIf { it.enabled })
-        override suspend fun upsert(alarm: Alarm): Long { upsertCount++; existing = alarm.copy(id = savedId); return savedId }
+        override suspend fun upsert(alarm: Alarm): Long { if (failUpsert) error("disk failure"); upsertCount++; existing = alarm.copy(id = savedId); return savedId }
         override suspend fun delete(id: Long) { onDelete(); existing = null }
         override suspend fun setEnabled(id: Long, enabled: Boolean) { existing = existing?.copy(enabled = enabled) }
     }
 
     private class FakeScheduler(
         private val onCancel: () -> Unit = {},
+        private val scheduleResult: ScheduleResult = ScheduleResult.Scheduled,
+        private val onCancelSnooze: () -> Unit = {},
     ) : AlarmScheduler {
         val scheduled = mutableListOf<Pair<Long, Instant>>()
         val cancelled = mutableListOf<Long>()
         override fun schedule(alarmId: Long, triggerAt: Instant): ScheduleResult {
             scheduled += alarmId to triggerAt
-            return ScheduleResult.Scheduled
+            return scheduleResult
         }
         override fun cancel(alarmId: Long) { cancelled += alarmId; onCancel() }
+        override fun cancelSnooze(alarmId: Long) { onCancelSnooze() }
         override fun scheduleSnooze(alarmId: Long, triggerAt: Instant): ScheduleResult = ScheduleResult.Scheduled
     }
 }

@@ -15,6 +15,10 @@ import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.smartworkalarm.R
 import dagger.hilt.android.qualifiers.ApplicationContext
+import java.time.LocalTime
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import javax.inject.Inject
 
 internal data class PreAlarmNotificationContent(
@@ -23,10 +27,13 @@ internal data class PreAlarmNotificationContent(
 )
 
 internal object PreAlarmNotificationText {
-    fun forAlarm(name: String): PreAlarmNotificationContent = PreAlarmNotificationContent(
-        title = "${name}이 10분 뒤 울립니다",
-        body = "오늘 이 알람을 끌까요?",
-    )
+    fun forAlarm(name: String, scheduledTime: LocalTime): PreAlarmNotificationContent =
+        PreAlarmNotificationContent(
+            title = "${name} 알람이 ${scheduledTime.format(TIME_FORMATTER)}에 울립니다",
+            body = "오늘 이 알림을 끌까요?",
+        )
+
+    private val TIME_FORMATTER: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
 }
 
 internal fun canPostPreAlarmNotification(sdkInt: Int, permissionGranted: Boolean): Boolean =
@@ -34,12 +41,28 @@ internal fun canPostPreAlarmNotification(sdkInt: Int, permissionGranted: Boolean
 
 fun interface PreAlarmNotificationCanceller {
     fun cancel(kind: AlarmKind, id: Long)
+    fun wasDelivered(key: AlarmOccurrenceKey): Boolean = false
 }
 
 class PreAlarmNotificationFactory @Inject constructor(
     @param:ApplicationContext private val context: Context,
     private val notificationManager: NotificationManager,
 ) : PreAlarmNotificationCanceller {
+    private val deliveries = context.getSharedPreferences("pre_alarm_deliveries", Context.MODE_PRIVATE)
+
+    override fun wasDelivered(key: AlarmOccurrenceKey): Boolean = synchronized(DELIVERY_LOCK) {
+        deliveries.getString(deliveryKey(key), null) == key.encode()
+    }
+
+    suspend fun reconcileEligibility(now: Instant, isEligible: suspend (AlarmOccurrenceKey) -> Boolean) {
+        val keys = synchronized(DELIVERY_LOCK) {
+            deliveries.all.values.mapNotNull { (it as? String)?.let(AlarmOccurrenceKey::decode) }
+        }
+        keys.filter { it.scheduledAt > now }.forEach { key ->
+            if (!isEligible(key)) cancel(key)
+        }
+    }
+
     fun ensureChannel() {
         notificationManager.createNotificationChannel(
             NotificationChannel(
@@ -47,7 +70,7 @@ class PreAlarmNotificationFactory @Inject constructor(
                 "알람 선택",
                 NotificationManager.IMPORTANCE_HIGH,
             ).apply {
-                description = "알람이 울리기 10분 전 선택 알림"
+                description = "알람이 울리기 30분 전 선택 알림"
                 enableVibration(true)
                 setSound(
                     Settings.System.DEFAULT_NOTIFICATION_URI,
@@ -68,27 +91,32 @@ class PreAlarmNotificationFactory @Inject constructor(
             return
         }
 
-        val content = PreAlarmNotificationText.forAlarm(alarmName)
+        val scheduledTime = key.scheduledAt.atZone(ZoneId.systemDefault()).toLocalTime()
+        val content = PreAlarmNotificationText.forAlarm(alarmName, scheduledTime)
         val skip = actionPendingIntent(PreAlarmContract.ACTION_SKIP_OCCURRENCE, key, SKIP_REQUEST_OFFSET)
         val keep = actionPendingIntent(PreAlarmContract.ACTION_KEEP_OCCURRENCE, key, KEEP_REQUEST_OFFSET)
-        runCatching {
-            ensureChannel()
-            notificationManager.notify(
-                notificationTag(key.kind, key.id),
-                NOTIFICATION_ID,
-                NotificationCompat.Builder(context, CHANNEL_ID)
-                    .setSmallIcon(R.drawable.ic_launcher_alarm)
-                    .setContentTitle(content.title)
-                    .setContentText(content.body)
-                    .setCategory(NotificationCompat.CATEGORY_REMINDER)
-                    .setPriority(NotificationCompat.PRIORITY_HIGH)
-                    .setAutoCancel(false)
-                    .setSound(Settings.System.DEFAULT_NOTIFICATION_URI)
-                    .setVibrate(VIBRATION_PATTERN)
-                    .addAction(0, "오늘만 끄기", skip)
-                    .addAction(0, "유지", keep)
-                    .build(),
-            )
+        synchronized(DELIVERY_LOCK) {
+            if (wasDelivered(key)) return
+            runCatching {
+                ensureChannel()
+                notificationManager.notify(
+                    notificationTag(key.kind, key.id),
+                    NOTIFICATION_ID,
+                    NotificationCompat.Builder(context, CHANNEL_ID)
+                        .setSmallIcon(R.drawable.ic_launcher_alarm)
+                        .setContentTitle(content.title)
+                        .setContentText(content.body)
+                        .setCategory(NotificationCompat.CATEGORY_REMINDER)
+                        .setPriority(NotificationCompat.PRIORITY_HIGH)
+                        .setAutoCancel(false)
+                        .setSound(Settings.System.DEFAULT_NOTIFICATION_URI)
+                        .setVibrate(VIBRATION_PATTERN)
+                        .addAction(0, "오늘만 끄기", skip)
+                        .addAction(0, "유지", keep)
+                        .build(),
+                )
+                check(deliveries.edit().putString(deliveryKey(key), key.encode()).commit())
+            }
         }
     }
 
@@ -120,6 +148,8 @@ class PreAlarmNotificationFactory @Inject constructor(
     )
 
     companion object {
+        private val DELIVERY_LOCK = Any()
+        private fun deliveryKey(key: AlarmOccurrenceKey): String = "${key.kind}:${key.id}"
         const val CHANNEL_ID = "pre_alarm_choice"
         private const val NOTIFICATION_ID = 7310
         private const val SKIP_REQUEST_OFFSET = 6_000_000

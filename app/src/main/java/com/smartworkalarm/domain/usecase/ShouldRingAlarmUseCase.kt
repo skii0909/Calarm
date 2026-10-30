@@ -30,10 +30,10 @@ class ShouldRingAlarmUseCase @Inject constructor(
         return calendarEventSource.getEventsOverlapping(start, end).fold(
             onSuccess = { events ->
                 val hasKeywordMatch = needsKeywordCheck && events.any {
-                    CalendarKeywordMatcher.matches(it.title, alarm.calendarKeywords)
+                    CalendarKeywordMatcher.matches(it.title, alarm.calendarKeywords, alarm.calendarKeywordExactMatch)
                 }
                 val hasCalendarHoliday = needsHolidayCheck && events.any {
-                    CalendarHolidayMatcher.matches(it.title)
+                    CalendarHolidayMatcher.matches(it)
                 }
                 if (hasKeywordMatch || hasCalendarHoliday) {
                     AlarmExecutionDecision.SKIP_FOR_VACATION

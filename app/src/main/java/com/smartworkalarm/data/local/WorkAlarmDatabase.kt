@@ -11,7 +11,7 @@ import androidx.room.RoomDatabase
         ShiftTypeAlarmEntity::class,
         ShiftPreviewEntity::class,
     ],
-    version = 6,
+    version = 7,
     exportSchema = true,
 )
 abstract class WorkAlarmDatabase : RoomDatabase() {

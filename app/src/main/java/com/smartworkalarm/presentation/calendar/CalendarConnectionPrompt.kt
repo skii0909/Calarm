@@ -29,7 +29,7 @@ fun CalendarConnectionPrompt(
     AlertDialog(
         onDismissRequest = { dismissedRequestKey = requestKey },
         title = { Text("캘린더 연결이 필요합니다") },
-        text = { Text("일정에 따라 알람을 자동으로 건너뛰려면 Google Calendar를 연결해 주세요.") },
+        text = { Text("일정에 따라 알람을 자동으로 건너뛰려면 Google 또는 Outlook 캘린더를 연결해 주세요.") },
         dismissButton = {
             TextButton(onClick = { dismissedRequestKey = requestKey }) { Text("나중에") }
         },
@@ -49,7 +49,6 @@ internal fun shouldShowCalendarConnectionPrompt(
     dismissedRequestKey: String? = null,
 ): Boolean = state != null &&
     !state.isConnected &&
-    state.permissionGranted &&
     !requiredPermissionsMissing &&
     requestKey != null &&
     requestKey != dismissedRequestKey
@@ -60,6 +59,7 @@ internal fun calendarConnectionPromptRequestKey(
 ): String? = when (route) {
     null,
     "settings",
+    "onboarding",
     -> null
 
     "alarm/{alarmId}",

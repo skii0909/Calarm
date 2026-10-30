@@ -31,14 +31,32 @@ class AlarmEditViewModelTest {
     @After fun tearDown() = Dispatchers.resetMain()
 
     @Test
-    fun `saving requires at least one repeat day`() = runTest(dispatcher) {
-        val viewModel = viewModelWith(FakeSaver())
+    fun `keyword mode is saved and changes mark editor dirty`() = runTest(dispatcher) {
+        val saver = FakeSaver()
+        val viewModel = viewModelWith(saver)
+        viewModel.onNameChanged("출근")
+        viewModel.onCalendarKeywordExactMatchChanged(true)
+        viewModel.save()
+        advanceUntilIdle()
+        assertTrue(saver.saved.single().calendarKeywordExactMatch)
+        assertFalse(viewModel.state.value.hasUnsavedChanges)
+        viewModel.onCalendarKeywordExactMatchChanged(false)
+        assertTrue(viewModel.state.value.hasUnsavedChanges)
+    }
+
+    @Test
+    fun `saving without a repeat day creates a one-time alarm`() = runTest(dispatcher) {
+        val saver = FakeSaver()
+        val viewModel = viewModelWith(saver)
         viewModel.onNameChanged("출근")
         viewModel.onTimeChanged(7, 0)
 
         viewModel.save()
+        advanceUntilIdle()
 
-        assertEquals("반복 요일을 하나 이상 선택하세요", viewModel.state.value.repeatDaysError)
+        assertEquals(0, saver.saved.single().repeatDaysMask)
+        assertTrue(saver.saved.single().calendarKeywords.isEmpty())
+        assertEquals(null, viewModel.state.value.repeatDaysError)
     }
 
     @Test
@@ -82,6 +100,13 @@ class AlarmEditViewModelTest {
         val viewModel = viewModelWith(FakeSaver())
 
         assertTrue(viewModel.state.value.snoozeEnabled)
+    }
+
+    @Test
+    fun `new alarm starts with an empty optional calendar keyword`() = runTest(dispatcher) {
+        val viewModel = viewModelWith(FakeSaver())
+
+        assertEquals("", viewModel.state.value.calendarKeywords)
     }
 
     @Test

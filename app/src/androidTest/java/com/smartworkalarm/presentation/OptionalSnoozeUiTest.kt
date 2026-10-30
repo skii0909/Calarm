@@ -3,6 +3,7 @@ package com.smartworkalarm.presentation
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performScrollTo
 import com.smartworkalarm.domain.model.Alarm
 import com.smartworkalarm.domain.model.ShiftTypeAlarm
 import com.smartworkalarm.presentation.alarmedit.AlarmEditScreenForTest
@@ -38,7 +39,7 @@ class OptionalSnoozeUiTest {
         }
 
         compose.onNodeWithText("17분", substring = true).assertDoesNotExist()
-        compose.onNodeWithText("다시 울림 사용").assertIsDisplayed()
+        compose.onNodeWithText("다시 울림 사용").performScrollTo().assertIsDisplayed()
     }
 
     @Test
